@@ -8,32 +8,28 @@
     "enabled": true,
     "head_sampling_rate": 1,
   },
+  "ai": {
+    "binding": "AI",
+  },
   "vars": {
+    "VOICE_PROVIDER": "workersai",
+    "LLM_BASE_URL": "https://api.deepseek.com",
+    "LLM_MODEL": "deepseek-chat",
+    "STT_LANGUAGE": "en",
+    "AURA_SPEAKER": "draco",
     "OPENROUTER_MODEL": "deepseek/deepseek-v4-flash-0731",
     "OPENROUTER_STT_MODEL": "openai/whisper-large-v3",
     "OPENROUTER_RESEARCH_MODEL": "perplexity/sonar-deep-research",
     "OPENROUTER_CODING_MODEL": "moonshotai/kimi-k3",
     "ELEVENLABS_TTS_MODEL": "eleven_multilingual_v2",
     "OPENROUTER_EMBEDDING_MODEL": "openai/text-embedding-3-small",
-    "APOLLO_OWNER_EMAIL": "galfre.vn@gmail.com",
+    "APOLLO_OWNER_EMAIL": "nahuelavalos@gmail.com",
   },
-  "containers": [
-    {
-      "class_name": "Sandbox",
-      "image": "./Dockerfile",
-      "instance_type": "standard-1",
-      "max_instances": 1,
-    },
-  ],
   "durable_objects": {
     "bindings": [
       {
         "name": "Apollo",
         "class_name": "Apollo",
-      },
-      {
-        "name": "Sandbox",
-        "class_name": "Sandbox",
       },
     ],
   },
@@ -41,10 +37,6 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["Apollo"],
-    },
-    {
-      "tag": "v2",
-      "new_sqlite_classes": ["Sandbox"],
     },
   ],
   "r2_buckets": [

@@ -199,6 +199,12 @@ async function consumeOpenRouterStream(
 export async function chatWithOpenRouter(input: {
   readonly openRouterApiKey: string;
   readonly modelId: string;
+  // Any OpenAI-format chat endpoint works here (DeepSeek, self-hosted, ...);
+  // OpenRouter stays the default so upstream behavior is unchanged.
+  readonly baseUrl?: string;
+  // Provider-specific body fields (e.g. disabling DeepSeek thinking mode)
+  // without forking this function per vendor.
+  readonly extraBody?: Record<string, unknown>;
   readonly messageList: readonly OpenRouterChatMessage[];
   readonly toolDefinitionList?: readonly {
     readonly name: string;
@@ -225,7 +231,7 @@ export async function chatWithOpenRouter(input: {
 
   const fetchImplementation = input.fetchImplementation ?? globalThis.fetch;
   const response = await fetchImplementation(
-    'https://openrouter.ai/api/v1/chat/completions',
+    `${input.baseUrl ?? 'https://openrouter.ai/api/v1'}/chat/completions`,
     {
       method: 'POST',
       headers: {
@@ -239,6 +245,7 @@ export async function chatWithOpenRouter(input: {
           ? { tools: toolDefinitionPayloadList }
           : {}),
         ...(input.onTextDelta !== undefined ? { stream: true } : {}),
+        ...input.extraBody,
       }),
     },
   );

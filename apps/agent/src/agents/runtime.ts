@@ -27,6 +27,11 @@ import { TTS_PCM_CHANNEL_COUNT, TTS_PCM_SAMPLE_RATE_HZ } from '@/voice/elevenlab
 import { chatWithOpenRouter } from '@/voice/llm';
 import { transcribeAudioWithOpenRouter } from '@/voice/stt';
 import {
+  synthesizeSpeechWithWorkersAi,
+  transcribeAudioWithWorkersAi,
+} from '@/voice/workersai';
+import { synthesizeSpeechThroughCache } from '@/voice/ttscache';
+import {
   streamAudioChunksAtPlaybackPace,
   type PlaybackAckSnapshot,
 } from '@/voice/stream';
@@ -104,6 +109,18 @@ export async function executeApolloTurn(
     [...toolDefinitionMap.keys()].filter((toolName) => isNamespacedMcpToolName(toolName)),
   );
 
+  // Provider-specific body fields (e.g. DeepSeek thinking-mode off) arrive as
+  // a JSON env var so switching vendors never means another code change.
+  let llmExtraBody: Record<string, unknown> | undefined;
+  try {
+    llmExtraBody =
+      dependencies.environment.LLM_EXTRA_BODY !== undefined
+        ? (JSON.parse(dependencies.environment.LLM_EXTRA_BODY) as Record<string, unknown>)
+        : undefined;
+  } catch {
+    llmExtraBody = undefined;
+  }
+
   const voiceAdapters: VoiceAdapters = isMockVoice
     ? {
         stt: async () => turnPart.text ?? 'hola',
@@ -117,28 +134,70 @@ export async function executeApolloTurn(
         },
         tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
       }
-    : {
-        stt: async (audioBuffer) =>
-          transcribeAudioWithOpenRouter({
-            audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
-            openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-            modelId: dependencies.environment.OPENROUTER_STT_MODEL,
-          }),
-        llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
-          chatWithOpenRouter({
-            openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-            modelId: dependencies.environment.OPENROUTER_MODEL,
-            messageList,
-            toolDefinitionList,
-            ...(onTextDelta !== undefined ? { onTextDelta } : {}),
-          }),
-        tts: async (text, voiceId) =>
-          synthesizeApolloSpeech({
-            environment: dependencies.environment,
-            text,
-            voiceId,
-          }),
-      };
+    : dependencies.environment.VOICE_PROVIDER === 'workersai'
+      ? {
+          stt: async (audioBuffer) =>
+            transcribeAudioWithWorkersAi({
+              ai: dependencies.environment.AI,
+              audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
+              ...(dependencies.environment.STT_LANGUAGE !== undefined
+                ? { languageCode: dependencies.environment.STT_LANGUAGE }
+                : {}),
+            }),
+          llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
+            chatWithOpenRouter({
+              openRouterApiKey:
+                dependencies.environment.LLM_API_KEY ??
+                dependencies.environment.OPENROUTER_API_KEY,
+              modelId:
+                dependencies.environment.LLM_MODEL ??
+                dependencies.environment.OPENROUTER_MODEL,
+              ...(dependencies.environment.LLM_BASE_URL !== undefined
+                ? { baseUrl: dependencies.environment.LLM_BASE_URL }
+                : {}),
+              ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
+              messageList,
+              toolDefinitionList,
+              ...(onTextDelta !== undefined ? { onTextDelta } : {}),
+            }),
+          // Same R2 cache as the ElevenLabs path: repeated utterances cost zero
+          // neurons. voiceId maps to an Aura speaker instead of an ElevenLabs id.
+          tts: async (text) =>
+            synthesizeSpeechThroughCache({
+              mediaBucket: dependencies.environment.MEDIA,
+              text,
+              voiceId: dependencies.environment.AURA_SPEAKER ?? 'draco',
+              modelId: '@cf/deepgram/aura-2-en',
+              synthesize: () =>
+                synthesizeSpeechWithWorkersAi({
+                  ai: dependencies.environment.AI,
+                  text,
+                  speaker: dependencies.environment.AURA_SPEAKER ?? 'draco',
+                }),
+            }),
+        }
+      : {
+          stt: async (audioBuffer) =>
+            transcribeAudioWithOpenRouter({
+              audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
+              openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
+              modelId: dependencies.environment.OPENROUTER_STT_MODEL,
+            }),
+          llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
+            chatWithOpenRouter({
+              openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
+              modelId: dependencies.environment.OPENROUTER_MODEL,
+              messageList,
+              toolDefinitionList,
+              ...(onTextDelta !== undefined ? { onTextDelta } : {}),
+            }),
+          tts: async (text, voiceId) =>
+            synthesizeApolloSpeech({
+              environment: dependencies.environment,
+              text,
+              voiceId,
+            }),
+        };
 
   const turnOutput = await runDeskTurn({
     text: turnPart.text,

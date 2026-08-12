@@ -4,6 +4,18 @@ import {
   type SandboxCodeLanguage,
 } from '@/sandbox/helpers';
 
+// The coding sandbox needs the Cloudflare Containers runtime, which this
+// deployment intentionally omits (no Docker at deploy time). The binding is
+// therefore absent from wrangler.jsonc; reaching it is a configuration error,
+// not a code path.
+function requireSandboxBinding(source: {
+  Sandbox?: unknown;
+}): never | NonNullable<unknown> {
+  if (source.Sandbox === undefined || source.Sandbox === null) {
+    throw new Error('Sandbox no disponible: este deploy no incluye Containers');
+  }
+  return source.Sandbox;
+}
 export type SandboxCodeRunResult = {
   readonly ok: boolean;
   readonly summary: string;
@@ -27,7 +39,7 @@ export async function runCodeInApolloSandbox(input: {
 }): Promise<SandboxCodeRunResult> {
   const { getSandbox } = await import('@cloudflare/sandbox');
   const sandbox = getSandbox(
-    input.environment.Sandbox,
+    requireSandboxBinding(input.environment as { Sandbox?: unknown }) as never,
     buildApolloSandboxId(input.deviceId),
     { normalizeId: true },
   );
@@ -77,7 +89,7 @@ export async function execCommandInApolloSandbox(input: {
 }): Promise<SandboxCommandRunResult> {
   const { getSandbox } = await import('@cloudflare/sandbox');
   const sandbox = getSandbox(
-    input.environment.Sandbox,
+    requireSandboxBinding(input.environment as { Sandbox?: unknown }) as never,
     buildApolloSandboxId(input.deviceId),
     { normalizeId: true },
   );

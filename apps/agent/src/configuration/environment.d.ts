@@ -14,6 +14,13 @@ interface Env {
   APOLLO_OWNER_EMAIL: string;
   GITHUB_APP_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
+  VOICE_PROVIDER?: string;
+  LLM_BASE_URL?: string;
+  LLM_API_KEY?: string;
+  LLM_MODEL?: string;
+  LLM_EXTRA_BODY?: string;
+  STT_LANGUAGE?: string;
+  AURA_SPEAKER?: string;
   MOCK_VOICE?: string;
   CODING_PROXY_ORIGIN?: string;
   CODING_ENGINE?: string;
@@ -37,6 +44,13 @@ declare namespace Cloudflare {
     APOLLO_OWNER_EMAIL: string;
     GITHUB_APP_ID: string;
     GITHUB_APP_PRIVATE_KEY: string;
+    VOICE_PROVIDER?: string;
+    LLM_BASE_URL?: string;
+    LLM_API_KEY?: string;
+    LLM_MODEL?: string;
+    LLM_EXTRA_BODY?: string;
+    STT_LANGUAGE?: string;
+    AURA_SPEAKER?: string;
     MOCK_VOICE?: string;
     CODING_PROXY_ORIGIN?: string;
     CODING_ENGINE?: string;

@@ -283,7 +283,11 @@ export class ApolloCoding extends WorkflowEntrypoint<Env, ApolloCodingParams> {
     const { getSandbox } = await import('@cloudflare/sandbox');
     // keepAlive because the disk is wiped on sleep: the 10 minute default would
     // take the clone with it while the agent is still thinking.
-    const sandbox = getSandbox(this.env.Sandbox, sandboxId, {
+    const sandboxBinding = (this.env as { Sandbox?: unknown }).Sandbox;
+    if (sandboxBinding === undefined || sandboxBinding === null) {
+      throw new Error('Sandbox no disponible: este deploy no incluye Containers');
+    }
+    const sandbox = getSandbox(sandboxBinding as never, sandboxId, {
       keepAlive: true,
       normalizeId: true,
     });
