@@ -5,7 +5,7 @@ import { buildApolloSoulPrompt, buildInstalledToolPromptNote } from '@/persona/s
 describe('apollo soul prompt', () => {
   it('always includes Apollo identity and shared tools base', () => {
     const soulPrompt = buildApolloSoulPrompt('default');
-    expect(soulPrompt).toContain('Sos Apollo');
+    expect(soulPrompt).toContain('You are Jarvis');
     expect(soulPrompt).toContain('remember_fact');
     expect(soulPrompt).toContain('weather_now');
     expect(soulPrompt).toContain('set_weather_location');

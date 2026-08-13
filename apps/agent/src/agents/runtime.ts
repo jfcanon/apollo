@@ -52,6 +52,7 @@ export type ApolloTurnRuntimeDependencies = {
   readonly session: Session;
   readonly deviceId: string;
   readonly effects: DeskToolEffects;
+  readonly runBridgeCommand?: (commandName: string) => Promise<string>;
   readonly toolDefinitionMap?: ReadonlyMap<string, ToolDefinition>;
   readonly isSpeechAborted?: () => boolean;
   readonly telemetrySnapshot?: DeskTelemetrySnapshot;
@@ -202,6 +203,9 @@ export async function executeApolloTurn(
   const turnOutput = await runDeskTurn({
     text: turnPart.text,
     audioBuffer: turnPart.audioBuffer,
+    ...(dependencies.runBridgeCommand !== undefined
+      ? { runBridgeCommand: dependencies.runBridgeCommand }
+      : {}),
     speechMode: dependencies.currentState.speechMode,
     focusState,
     sqlExecutor: dependencies.sqlExecutor,

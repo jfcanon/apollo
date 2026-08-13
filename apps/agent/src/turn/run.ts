@@ -1,3 +1,4 @@
+import { matchBridgeCommand } from '@/bridge/router';
 import type { DeskFocusState } from '@/focus/logic';
 import { recallMemoryRecords, type MemorySqlExecutor } from '@/memory/store';
 import { buildCurrentTimePromptNote } from '@/persona/clock';
@@ -55,6 +56,7 @@ export type TurnInput = {
   readonly sqlExecutor: MemorySqlExecutor;
   readonly environment: Env;
   readonly adapters: VoiceAdapters;
+  readonly runBridgeCommand?: (commandName: string) => Promise<string>;
   readonly toolDefinitionMap: ReadonlyMap<string, ToolDefinition>;
   readonly pendingConfirmation?: PendingToolConfirmation;
   readonly confirmOk?: boolean;
@@ -185,6 +187,43 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
       uiEventList,
       transcript: '',
       spokenText: 'No te escuché.',
+      speechMode: input.speechMode,
+      focusState: input.focusState,
+      memoryContentList: [],
+      toolResultList,
+      expectsReply: false,
+    };
+  }
+
+  // Mode-A interception: a session-management phrase goes to the Mac bridge,
+  // never to the LLM. The router is an exact keyword grammar — the transcript
+  // cannot talk its way into machine access through the model.
+  const bridgeCommandName =
+    input.runBridgeCommand !== undefined ? matchBridgeCommand(userText) : null;
+  if (bridgeCommandName !== null && input.runBridgeCommand !== undefined) {
+    await input.onThinkingCaption?.('Consultando la Mac…');
+    let bridgeSpokenText: string;
+    try {
+      bridgeSpokenText = await input.runBridgeCommand(bridgeCommandName);
+    } catch {
+      bridgeSpokenText =
+        'I cannot reach your Mac at the moment, sir. The bridge appears to be offline.';
+    }
+    const sanitizedBridgeText = sanitizeTextForSpeech(bridgeSpokenText);
+    const [bridgeFirstSegment, ...bridgeFollowUpSegmentList] =
+      splitTextIntoSpeechSegmentList(sanitizedBridgeText);
+    uiEventList.push('START_SPEAK');
+    const bridgeTtsAudio = await input.adapters.tts(
+      bridgeFirstSegment ?? sanitizedBridgeText,
+      APOLLO_TTS_VOICE,
+    );
+    uiEventList.push('SPEAK_DONE');
+    return {
+      uiEventList,
+      transcript: userText,
+      spokenText: sanitizedBridgeText,
+      ttsAudio: bridgeTtsAudio,
+      ttsFollowUpSegmentTextList: bridgeFollowUpSegmentList,
       speechMode: input.speechMode,
       focusState: input.focusState,
       memoryContentList: [],
