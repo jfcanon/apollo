@@ -27,7 +27,7 @@ export async function transcribeAudioWithWorkersAi(input: {
     (input.modelId ?? '@cf/openai/whisper-large-v3-turbo') as keyof AiModels,
     {
       audio: encodeArrayBufferAsBase64(input.audioBuffer),
-      vad_filter: 'true',
+      vad_filter: true,
       ...(input.languageCode !== undefined ? { language: input.languageCode } : {}),
     } as never,
   );

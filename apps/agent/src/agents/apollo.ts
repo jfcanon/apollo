@@ -380,17 +380,43 @@ export class Apollo extends Agent<Env, ApolloState> {
     // would let one desynchronize the desk. The SDK dispatches @callable RPC
     // and state sync before this runs, so the dashboard keeps both.
     if (!hasDeviceConnectionTag(connection.tags)) {
+      // TEMP diagnostic (remove after device bring-up)
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          message: 'apollo_msg_untagged_dropped',
+          kind: typeof message,
+        }),
+      );
       return;
     }
 
     if (typeof message !== 'string') {
       this.#audioChunkList.push(message as ArrayBuffer);
+      // TEMP diagnostic (remove after device bring-up): log every 16th chunk
+      if (this.#audioChunkList.length % 16 === 1) {
+        console.log(
+          JSON.stringify({
+            level: 'debug',
+            message: 'apollo_audio_chunk',
+            count: this.#audioChunkList.length,
+          }),
+        );
+      }
       return;
     }
 
     let deviceMessage: DeviceToServerMessage;
     try {
       deviceMessage = parseDeviceToServerMessage(message);
+      // TEMP diagnostic (remove after device bring-up)
+      console.log(
+        JSON.stringify({
+          level: 'debug',
+          message: 'apollo_device_msg',
+          type: deviceMessage.type,
+        }),
+      );
     } catch (error) {
       console.error(
         JSON.stringify({
