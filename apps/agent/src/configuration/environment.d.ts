@@ -22,6 +22,7 @@ interface Env {
   LLM_EXTRA_BODY?: string;
   STT_LANGUAGE?: string;
   AURA_SPEAKER?: string;
+  WORKERSAI_TTS_MODEL?: string;
   MOCK_VOICE?: string;
   CODING_PROXY_ORIGIN?: string;
   CODING_ENGINE?: string;
@@ -53,6 +54,7 @@ declare namespace Cloudflare {
     LLM_EXTRA_BODY?: string;
     STT_LANGUAGE?: string;
     AURA_SPEAKER?: string;
+    WORKERSAI_TTS_MODEL?: string;
     MOCK_VOICE?: string;
     CODING_PROXY_ORIGIN?: string;
     CODING_ENGINE?: string;

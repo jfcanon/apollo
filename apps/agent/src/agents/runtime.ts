@@ -168,12 +168,16 @@ export async function executeApolloTurn(
               mediaBucket: dependencies.environment.MEDIA,
               text,
               voiceId: dependencies.environment.AURA_SPEAKER ?? 'draco',
-              modelId: '@cf/deepgram/aura-2-en',
+              modelId:
+                dependencies.environment.WORKERSAI_TTS_MODEL ?? '@cf/deepgram/aura-2-en',
               synthesize: () =>
                 synthesizeSpeechWithWorkersAi({
                   ai: dependencies.environment.AI,
                   text,
                   speaker: dependencies.environment.AURA_SPEAKER ?? 'draco',
+                  ...(dependencies.environment.WORKERSAI_TTS_MODEL !== undefined
+                    ? { modelId: dependencies.environment.WORKERSAI_TTS_MODEL }
+                    : {}),
                 }),
             }),
         }
