@@ -12,8 +12,10 @@ const deskSpeechModeCatalog: readonly DeskSpeechMode[] = [
     id: 'default',
     name: 'default',
     promptOverride:
-      'Modo default: claro y útil; 1–3 oraciones habladas; sin payasadas ni jerga técnica de más.',
-    accentColor: '#FFFFFF',
+      'Default mode: clear and useful; one to three spoken sentences; no clowning and no more jargon than needed.',
+    // JARVIS hologram amber: the accent the device paints its face ring and
+    // captions with.
+    accentColor: '#FFB000',
   },
   {
     id: 'nerd',

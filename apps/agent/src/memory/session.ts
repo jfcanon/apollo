@@ -13,28 +13,33 @@ const RECENT_TURN_HISTORY_BYTE_BUDGET = 8_000;
 const RECENT_TURN_HISTORY_MIN_MESSAGE_COUNT = 10;
 
 export function createApolloSession(agent: Apollo, mediaBucket: R2Bucket): Session {
-  return Session.create(agent)
-    .forSession('desk-main')
-    .withContext('soul', {
-      provider: {
-        get: async () => {
-          return buildApolloSoulPrompt(agent.state.speechMode);
+  return (
+    Session.create(agent)
+      // 'desk-main' was the Spanish-era Apollo session; its cached prompt and
+      // history kept steering the model back to the old persona. A new session
+      // id starts the Jarvis era clean without deleting the old data.
+      .forSession('desk-jarvis')
+      .withContext('soul', {
+        provider: {
+          get: async () => {
+            return buildApolloSoulPrompt(agent.state.speechMode);
+          },
         },
-      },
-    })
-    .withContext('memory', {
-      description: 'Hechos y preferencias aprendidas del usuario',
-      maxTokens: 1100,
-    })
-    .withContext('knowledge', {
-      description: 'Base de conocimiento buscable (FTS)',
-      provider: new AgentSearchProvider(agent),
-    })
-    .withContext('skills', {
-      description: 'Documentos largos en R2 (load on demand)',
-      provider: new R2SkillProvider(mediaBucket, { prefix: 'skills/' }),
-    })
-    .withCachedPrompt();
+      })
+      .withContext('memory', {
+        description: 'Hechos y preferencias aprendidas del usuario',
+        maxTokens: 1100,
+      })
+      .withContext('knowledge', {
+        description: 'Base de conocimiento buscable (FTS)',
+        provider: new AgentSearchProvider(agent),
+      })
+      .withContext('skills', {
+        description: 'Documentos largos en R2 (load on demand)',
+        provider: new R2SkillProvider(mediaBucket, { prefix: 'skills/' }),
+      })
+      .withCachedPrompt()
+  );
 }
 
 export async function rememberFactInSession(

@@ -142,7 +142,15 @@ export async function buildTestRsaPrivateKeyPem(): Promise<string> {
 }
 
 export function createFakeApolloEnvironment(overrides: Partial<Env> = {}): Env {
+  // Tests never reach a real model: any AI.run call in a test is a bug, and
+  // failing loudly here beats a silent network attempt.
+  const fakeAiBinding = {
+    run: async () => {
+      throw new Error('AI.run llamado en un test sin override');
+    },
+  } as unknown as Env['AI'];
   return {
+    AI: fakeAiBinding,
     OPENROUTER_MODEL: 'deepseek/deepseek-v4-flash-0731',
     OPENROUTER_STT_MODEL: 'openai/whisper-large-v3',
     OPENROUTER_RESEARCH_MODEL: 'perplexity/sonar-deep-research',
@@ -164,7 +172,6 @@ export function createFakeApolloEnvironment(overrides: Partial<Env> = {}): Env {
     APOLLO_QUEUE: {} as Env['APOLLO_QUEUE'],
     BACKGROUND: {} as Env['BACKGROUND'],
     CODING: {} as Env['CODING'],
-    Sandbox: {} as Env['Sandbox'],
     ...overrides,
   };
 }

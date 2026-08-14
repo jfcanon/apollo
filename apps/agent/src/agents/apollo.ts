@@ -27,10 +27,13 @@ import {
 } from '@/agents/rpc';
 import { concatenateArrayBufferList, executeApolloTurn } from '@/agents/runtime';
 import {
+  BRIDGE_CONNECTION_TAG,
   DEVICE_CONNECTION_TAG,
+  hasBridgeConnectionTag,
   hasDeviceConnectionTag,
   resolveApolloConnectionRole,
 } from '@/auth/role';
+import { createBridgeRequestRegistry } from '@/bridge/registry';
 import { isDeviceSharedSecretValid } from '@/auth/token';
 import {
   clearDeskFocus,
@@ -198,6 +201,7 @@ export class Apollo extends Agent<Env, ApolloState> {
   #isDeliveringInitiative = false;
   #isConsolidatingMemory = false;
   #deviceMcpRequestRegistry = createDeviceMcpRequestRegistry();
+  #bridgeRegistry = createBridgeRequestRegistry();
   #ttsSequence = 0;
   #lastPlaybackAck: {
     readonly sequence: number;
@@ -210,6 +214,22 @@ export class Apollo extends Agent<Env, ApolloState> {
       this.#session = createApolloSession(this, this.env.MEDIA);
     }
     return this.#session;
+  }
+
+  // Sends a Mode-A command to the Mac daemon over its bridge connection and
+  // awaits the result. Throws when no daemon is connected or it times out —
+  // the turn turns that into a spoken "Mac unreachable".
+  async #runBridgeCommand(commandName: string): Promise<string> {
+    const bridgeConnection = [...this.getConnections(BRIDGE_CONNECTION_TAG)][0];
+    if (bridgeConnection === undefined) {
+      throw new Error('bridge offline');
+    }
+    const requestId = crypto.randomUUID();
+    const pendingResult = this.#bridgeRegistry.createRequest(requestId);
+    bridgeConnection.send(
+      JSON.stringify({ type: 'bridge_command', id: requestId, command: commandName }),
+    );
+    return pendingResult;
   }
 
   async onStart(): Promise<void> {
@@ -379,6 +399,38 @@ export class Apollo extends Agent<Env, ApolloState> {
     // own screen. None of it means anything from a browser, and honoring it
     // would let one desynchronize the desk. The SDK dispatches @callable RPC
     // and state sync before this runs, so the dashboard keeps both.
+    // The Mac bridge daemon speaks its own two-frame protocol, never the
+    // device schema: results here resolve a command the desk turn is awaiting.
+    if (hasBridgeConnectionTag(connection.tags)) {
+      if (typeof message !== 'string') {
+        return;
+      }
+      try {
+        const bridgeFrame = JSON.parse(message) as {
+          type?: string;
+          id?: string;
+          ok?: boolean;
+          output?: string;
+        };
+        if (bridgeFrame.type === 'bridge_result' && typeof bridgeFrame.id === 'string') {
+          if (bridgeFrame.ok === true && typeof bridgeFrame.output === 'string') {
+            this.#bridgeRegistry.resolveRequest(bridgeFrame.id, bridgeFrame.output);
+          } else {
+            this.#bridgeRegistry.rejectRequest(
+              bridgeFrame.id,
+              typeof bridgeFrame.output === 'string'
+                ? bridgeFrame.output
+                : 'bridge command failed',
+            );
+          }
+        }
+      } catch {
+        // A malformed bridge frame resolves nothing; the pending request times
+        // out on its own schedule.
+      }
+      return;
+    }
+
     if (!hasDeviceConnectionTag(connection.tags)) {
       return;
     }
@@ -1388,6 +1440,7 @@ export class Apollo extends Agent<Env, ApolloState> {
           session: this.session,
           deviceId,
           effects: deskToolEffects,
+          runBridgeCommand: (commandName: string) => this.#runBridgeCommand(commandName),
           toolDefinitionMap,
           isSpeechAborted: () => this.#isSpeechAborted,
           allocateTtsSequence: () => {

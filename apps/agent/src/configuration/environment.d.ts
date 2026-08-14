@@ -1,6 +1,7 @@
 interface Env {
   DEVICE_SHARED_SECRET: string;
   DASHBOARD_SHARED_SECRET: string;
+  BRIDGE_SHARED_SECRET?: string;
   OPENROUTER_API_KEY: string;
   OPENROUTER_MODEL: string;
   OPENROUTER_STT_MODEL: string;
@@ -14,6 +15,14 @@ interface Env {
   APOLLO_OWNER_EMAIL: string;
   GITHUB_APP_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
+  VOICE_PROVIDER?: string;
+  LLM_BASE_URL?: string;
+  LLM_API_KEY?: string;
+  LLM_MODEL?: string;
+  LLM_EXTRA_BODY?: string;
+  STT_LANGUAGE?: string;
+  AURA_SPEAKER?: string;
+  WORKERSAI_TTS_MODEL?: string;
   MOCK_VOICE?: string;
   CODING_PROXY_ORIGIN?: string;
   CODING_ENGINE?: string;
@@ -24,6 +33,7 @@ declare namespace Cloudflare {
   interface Env {
     DEVICE_SHARED_SECRET: string;
     DASHBOARD_SHARED_SECRET: string;
+    BRIDGE_SHARED_SECRET?: string;
     OPENROUTER_API_KEY: string;
     OPENROUTER_MODEL: string;
     OPENROUTER_STT_MODEL: string;
@@ -37,6 +47,14 @@ declare namespace Cloudflare {
     APOLLO_OWNER_EMAIL: string;
     GITHUB_APP_ID: string;
     GITHUB_APP_PRIVATE_KEY: string;
+    VOICE_PROVIDER?: string;
+    LLM_BASE_URL?: string;
+    LLM_API_KEY?: string;
+    LLM_MODEL?: string;
+    LLM_EXTRA_BODY?: string;
+    STT_LANGUAGE?: string;
+    AURA_SPEAKER?: string;
+    WORKERSAI_TTS_MODEL?: string;
     MOCK_VOICE?: string;
     CODING_PROXY_ORIGIN?: string;
     CODING_ENGINE?: string;
