@@ -2,6 +2,7 @@ import { routeAgentRequest } from 'agents';
 import { Sandbox } from '@cloudflare/sandbox';
 
 import { authorizeApolloConnection, Apollo } from '@/agents/apollo';
+import { handleBrainProxyRequest } from '@/brain/proxy';
 import { CODING_PROXY_PATH_PREFIX, handleCodingLlmProxyRequest } from '@/coding/proxy';
 import { handleOtaRequest } from '@/ota/routes';
 import { consumeApolloQueueBatch } from '@/queues/consume';
@@ -24,6 +25,10 @@ export default {
 
     if (requestUrl.pathname.startsWith('/ota/')) {
       return handleOtaRequest(request, requestUrl, environment);
+    }
+
+    if (requestUrl.pathname.startsWith('/brain/')) {
+      return handleBrainProxyRequest(request, requestUrl, environment);
     }
 
     if (requestUrl.pathname.startsWith(`${CODING_PROXY_PATH_PREFIX}/`)) {
