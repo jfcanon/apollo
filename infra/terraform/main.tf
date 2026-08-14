@@ -85,6 +85,13 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "brain" {
   config_src    = "cloudflare"
 }
 
+# The run token for the VM's cloudflared. In provider v5 this is a data
+# source, not an attribute of the tunnel resource.
+data "cloudflare_zero_trust_tunnel_cloudflared_token" "brain" {
+  account_id = var.cloudflare_account_id
+  tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.brain.id
+}
+
 # Ingress: the brain hostname -> the VM's local Hermes API. Catch-all 404 is
 # required as the last rule.
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "brain" {
@@ -155,7 +162,7 @@ resource "cloudflare_zero_trust_access_application" "brain" {
 
 # The VM's cloudflared runs: cloudflared tunnel run --token <tunnel_token>
 output "tunnel_token" {
-  value     = cloudflare_zero_trust_tunnel_cloudflared.brain.token
+  value     = data.cloudflare_zero_trust_tunnel_cloudflared_token.brain.token
   sensitive = true
 }
 
