@@ -291,6 +291,35 @@ export class Apollo extends Agent<Env, ApolloState> {
       'refreshDashboardWeather',
     );
     await this.schedule(OWNER_MEMORY_CONSOLIDATION_CRON, 'consolidateOwnerMemory');
+    // The consolidation cron produced zero log lines for weeks and its handler has
+    // silent early-return paths, so "no logs" could not distinguish "never fired"
+    // from "fired and skipped". Emit the row the scheduler actually holds — one
+    // line per DO start — so the next boot proves which it is.
+    try {
+      const consolidationSchedule = this.getSchedules().find(
+        (scheduleRow) => scheduleRow.callback === 'consolidateOwnerMemory',
+      );
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          message: 'owner_memory_schedule_state',
+          found: consolidationSchedule !== undefined,
+          type: consolidationSchedule?.type,
+          nextTimeIso:
+            consolidationSchedule?.time === undefined
+              ? undefined
+              : new Date(consolidationSchedule.time * 1000).toISOString(),
+        }),
+      );
+    } catch (scheduleInspectionError) {
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          message: 'owner_memory_schedule_inspect_failed',
+          detail: String(scheduleInspectionError),
+        }),
+      );
+    }
   }
 
   async #resolveWeatherLocation() {

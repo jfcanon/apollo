@@ -99,6 +99,15 @@ export async function runOwnerMemoryConsolidation(
     nowMilliseconds - state.lastConsolidatedAtMilliseconds <
       OWNER_MEMORY_MIN_RUN_INTERVAL_MS
   ) {
+    // Previously a silent return: indistinguishable in the logs from the cron
+    // never firing at all.
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        message: 'owner_memory_skipped_min_interval',
+        sinceLastMs: nowMilliseconds - state.lastConsolidatedAtMilliseconds,
+      }),
+    );
     return;
   }
   const latestLeaf = await session.getLatestLeaf();
@@ -115,6 +124,17 @@ export async function runOwnerMemoryConsolidation(
       sqlExecutor,
       OWNER_MEMORY_STATE_PREFERENCE_KEY,
       JSON.stringify(idleState),
+    );
+    // Also previously silent. `latestLeaf === null` in particular means the
+    // session had no history to read, which is a real failure mode dressed up
+    // as an idle day.
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        message: 'owner_memory_skipped_idle',
+        hadLatestLeaf: latestLeaf !== null,
+        factCount: idleState.factList.length,
+      }),
     );
     return;
   }
