@@ -26,6 +26,7 @@ import { runDeskTurn, type VoiceAdapters } from '@/turn/run';
 import { TTS_PCM_CHANNEL_COUNT, TTS_PCM_SAMPLE_RATE_HZ } from '@/voice/elevenlabs';
 import { chatWithOpenRouter } from '@/voice/llm';
 import { transcribeAudioWithOpenRouter } from '@/voice/stt';
+import { synthesizeSpeechWithGemini } from '@/voice/gemini';
 import { synthesizeSpeechWithGroq, transcribeAudioWithGroq } from '@/voice/groq';
 import {
   synthesizeSpeechWithWorkersAi,
@@ -136,7 +137,8 @@ export async function executeApolloTurn(
         },
         tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
       }
-    : dependencies.environment.VOICE_PROVIDER === 'groq'
+    : dependencies.environment.VOICE_PROVIDER === 'groq' ||
+        dependencies.environment.VOICE_PROVIDER === 'free'
       ? {
           // Groq serves STT and TTS over plain HTTPS, so this path spends no
           // Workers AI neurons at all — the daily free allowance that kept
@@ -170,24 +172,45 @@ export async function executeApolloTurn(
             }),
           // Same R2 cache as every other provider: a repeated sentence is
           // served from storage instead of re-synthesised.
+          // 'free' speaks through Gemini, which already emits the device's exact
+          // contract (audio/L16;codec=pcm;rate=24000) and needs no model-terms
+          // acceptance. 'groq' uses Orpheus, which does require it.
           tts: async (text) =>
-            synthesizeSpeechThroughCache({
-              mediaBucket: dependencies.environment.MEDIA,
-              text,
-              voiceId: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
-              modelId:
-                dependencies.environment.GROQ_TTS_MODEL ??
-                'canopylabs/orpheus-v1-english',
-              synthesize: () =>
-                synthesizeSpeechWithGroq({
-                  groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
+            dependencies.environment.VOICE_PROVIDER === 'free'
+              ? synthesizeSpeechThroughCache({
+                  mediaBucket: dependencies.environment.MEDIA,
                   text,
-                  voice: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
-                  ...(dependencies.environment.GROQ_TTS_MODEL !== undefined
-                    ? { modelId: dependencies.environment.GROQ_TTS_MODEL }
-                    : {}),
+                  voiceId: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+                  modelId:
+                    dependencies.environment.GEMINI_TTS_MODEL ??
+                    'gemini-2.5-flash-preview-tts',
+                  synthesize: () =>
+                    synthesizeSpeechWithGemini({
+                      geminiApiKey: dependencies.environment.GEMINI_API_KEY ?? '',
+                      text,
+                      voiceName: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+                      ...(dependencies.environment.GEMINI_TTS_MODEL !== undefined
+                        ? { modelId: dependencies.environment.GEMINI_TTS_MODEL }
+                        : {}),
+                    }),
+                })
+              : synthesizeSpeechThroughCache({
+                  mediaBucket: dependencies.environment.MEDIA,
+                  text,
+                  voiceId: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
+                  modelId:
+                    dependencies.environment.GROQ_TTS_MODEL ??
+                    'canopylabs/orpheus-v1-english',
+                  synthesize: () =>
+                    synthesizeSpeechWithGroq({
+                      groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
+                      text,
+                      voice: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
+                      ...(dependencies.environment.GROQ_TTS_MODEL !== undefined
+                        ? { modelId: dependencies.environment.GROQ_TTS_MODEL }
+                        : {}),
+                    }),
                 }),
-            }),
         }
       : dependencies.environment.VOICE_PROVIDER === 'workersai'
         ? {

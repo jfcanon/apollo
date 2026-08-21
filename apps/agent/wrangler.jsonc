@@ -12,7 +12,11 @@
     "binding": "AI",
   },
   "vars": {
-    "VOICE_PROVIDER": "workersai",
+    // "free" = Groq STT (whisper-large-v3-turbo) + Gemini TTS (24kHz L16 PCM)
+    // + the LLM configured below. Spends ZERO Workers AI neurons, whose 10k/day
+    // free allowance served both STT and TTS and took the whole voice loop down
+    // with it. Set "workersai" to go back.
+    "VOICE_PROVIDER": "free",
     "LLM_BASE_URL": "https://api.deepseek.com",
     "LLM_MODEL": "deepseek-chat",
     "STT_LANGUAGE": "en",
