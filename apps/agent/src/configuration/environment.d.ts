@@ -26,6 +26,10 @@ interface Env {
   BRAIN_ACCESS_CLIENT_ID?: string;
   BRAIN_ACCESS_CLIENT_SECRET?: string;
   WORKERSAI_TTS_MODEL?: string;
+  GROQ_API_KEY?: string;
+  GROQ_STT_MODEL?: string;
+  GROQ_TTS_MODEL?: string;
+  GROQ_TTS_VOICE?: string;
   MOCK_VOICE?: string;
   CODING_PROXY_ORIGIN?: string;
   CODING_ENGINE?: string;
@@ -61,6 +65,14 @@ declare namespace Cloudflare {
     BRAIN_ACCESS_CLIENT_ID?: string;
     BRAIN_ACCESS_CLIENT_SECRET?: string;
     WORKERSAI_TTS_MODEL?: string;
+    GROQ_API_KEY?: string;
+    GROQ_STT_MODEL?: string;
+    GROQ_TTS_MODEL?: string;
+    GROQ_TTS_VOICE?: string;
+    GROQ_API_KEY?: string;
+    GROQ_STT_MODEL?: string;
+    GROQ_TTS_MODEL?: string;
+    GROQ_TTS_VOICE?: string;
     MOCK_VOICE?: string;
     CODING_PROXY_ORIGIN?: string;
     CODING_ENGINE?: string;

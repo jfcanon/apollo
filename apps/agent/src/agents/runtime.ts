@@ -26,6 +26,7 @@ import { runDeskTurn, type VoiceAdapters } from '@/turn/run';
 import { TTS_PCM_CHANNEL_COUNT, TTS_PCM_SAMPLE_RATE_HZ } from '@/voice/elevenlabs';
 import { chatWithOpenRouter } from '@/voice/llm';
 import { transcribeAudioWithOpenRouter } from '@/voice/stt';
+import { synthesizeSpeechWithGroq, transcribeAudioWithGroq } from '@/voice/groq';
 import {
   synthesizeSpeechWithWorkersAi,
   transcribeAudioWithWorkersAi,
@@ -135,12 +136,18 @@ export async function executeApolloTurn(
         },
         tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
       }
-    : dependencies.environment.VOICE_PROVIDER === 'workersai'
+    : dependencies.environment.VOICE_PROVIDER === 'groq'
       ? {
+          // Groq serves STT and TTS over plain HTTPS, so this path spends no
+          // Workers AI neurons at all — the daily free allowance that kept
+          // taking the whole voice loop down with it.
           stt: async (audioBuffer) =>
-            transcribeAudioWithWorkersAi({
-              ai: dependencies.environment.AI,
+            transcribeAudioWithGroq({
+              groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
               audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
+              ...(dependencies.environment.GROQ_STT_MODEL !== undefined
+                ? { modelId: dependencies.environment.GROQ_STT_MODEL }
+                : {}),
               ...(dependencies.environment.STT_LANGUAGE !== undefined
                 ? { languageCode: dependencies.environment.STT_LANGUAGE }
                 : {}),
@@ -161,48 +168,96 @@ export async function executeApolloTurn(
               toolDefinitionList,
               ...(onTextDelta !== undefined ? { onTextDelta } : {}),
             }),
-          // Same R2 cache as the ElevenLabs path: repeated utterances cost zero
-          // neurons. voiceId maps to an Aura speaker instead of an ElevenLabs id.
+          // Same R2 cache as every other provider: a repeated sentence is
+          // served from storage instead of re-synthesised.
           tts: async (text) =>
             synthesizeSpeechThroughCache({
               mediaBucket: dependencies.environment.MEDIA,
               text,
-              voiceId: dependencies.environment.AURA_SPEAKER ?? 'draco',
+              voiceId: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
               modelId:
-                dependencies.environment.WORKERSAI_TTS_MODEL ?? '@cf/deepgram/aura-2-en',
+                dependencies.environment.GROQ_TTS_MODEL ??
+                'canopylabs/orpheus-v1-english',
               synthesize: () =>
-                synthesizeSpeechWithWorkersAi({
-                  ai: dependencies.environment.AI,
+                synthesizeSpeechWithGroq({
+                  groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
                   text,
-                  speaker: dependencies.environment.AURA_SPEAKER ?? 'draco',
-                  ...(dependencies.environment.WORKERSAI_TTS_MODEL !== undefined
-                    ? { modelId: dependencies.environment.WORKERSAI_TTS_MODEL }
+                  voice: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
+                  ...(dependencies.environment.GROQ_TTS_MODEL !== undefined
+                    ? { modelId: dependencies.environment.GROQ_TTS_MODEL }
                     : {}),
                 }),
             }),
         }
-      : {
-          stt: async (audioBuffer) =>
-            transcribeAudioWithOpenRouter({
-              audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
-              openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-              modelId: dependencies.environment.OPENROUTER_STT_MODEL,
-            }),
-          llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
-            chatWithOpenRouter({
-              openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-              modelId: dependencies.environment.OPENROUTER_MODEL,
-              messageList,
-              toolDefinitionList,
-              ...(onTextDelta !== undefined ? { onTextDelta } : {}),
-            }),
-          tts: async (text, voiceId) =>
-            synthesizeApolloSpeech({
-              environment: dependencies.environment,
-              text,
-              voiceId,
-            }),
-        };
+      : dependencies.environment.VOICE_PROVIDER === 'workersai'
+        ? {
+            stt: async (audioBuffer) =>
+              transcribeAudioWithWorkersAi({
+                ai: dependencies.environment.AI,
+                audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
+                ...(dependencies.environment.STT_LANGUAGE !== undefined
+                  ? { languageCode: dependencies.environment.STT_LANGUAGE }
+                  : {}),
+              }),
+            llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
+              chatWithOpenRouter({
+                openRouterApiKey:
+                  dependencies.environment.LLM_API_KEY ??
+                  dependencies.environment.OPENROUTER_API_KEY,
+                modelId:
+                  dependencies.environment.LLM_MODEL ??
+                  dependencies.environment.OPENROUTER_MODEL,
+                ...(dependencies.environment.LLM_BASE_URL !== undefined
+                  ? { baseUrl: dependencies.environment.LLM_BASE_URL }
+                  : {}),
+                ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
+                messageList,
+                toolDefinitionList,
+                ...(onTextDelta !== undefined ? { onTextDelta } : {}),
+              }),
+            // Same R2 cache as the ElevenLabs path: repeated utterances cost zero
+            // neurons. voiceId maps to an Aura speaker instead of an ElevenLabs id.
+            tts: async (text) =>
+              synthesizeSpeechThroughCache({
+                mediaBucket: dependencies.environment.MEDIA,
+                text,
+                voiceId: dependencies.environment.AURA_SPEAKER ?? 'draco',
+                modelId:
+                  dependencies.environment.WORKERSAI_TTS_MODEL ??
+                  '@cf/deepgram/aura-2-en',
+                synthesize: () =>
+                  synthesizeSpeechWithWorkersAi({
+                    ai: dependencies.environment.AI,
+                    text,
+                    speaker: dependencies.environment.AURA_SPEAKER ?? 'draco',
+                    ...(dependencies.environment.WORKERSAI_TTS_MODEL !== undefined
+                      ? { modelId: dependencies.environment.WORKERSAI_TTS_MODEL }
+                      : {}),
+                  }),
+              }),
+          }
+        : {
+            stt: async (audioBuffer) =>
+              transcribeAudioWithOpenRouter({
+                audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
+                openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
+                modelId: dependencies.environment.OPENROUTER_STT_MODEL,
+              }),
+            llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
+              chatWithOpenRouter({
+                openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
+                modelId: dependencies.environment.OPENROUTER_MODEL,
+                messageList,
+                toolDefinitionList,
+                ...(onTextDelta !== undefined ? { onTextDelta } : {}),
+              }),
+            tts: async (text, voiceId) =>
+              synthesizeApolloSpeech({
+                environment: dependencies.environment,
+                text,
+                voiceId,
+              }),
+          };
 
   const turnOutput = await runDeskTurn({
     text: turnPart.text,
