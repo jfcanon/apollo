@@ -90,14 +90,60 @@ export async function readHueHomeSnapshot(environment: Env): Promise<HueHomeSnap
   };
 }
 
+// Room names are spoken, not typed: "TV lights", "tv-lights" and "las luces
+// del tv" must all reach the room called "Tvlights". Compare on letters and
+// digits only, accents folded, and drop the filler words a voice request adds.
+const ROOM_FILLER_WORD_LIST = [
+  'luces',
+  'luz',
+  'lights',
+  'light',
+  'lamp',
+  'lampara',
+  'habitacion',
+  'cuarto',
+  'room',
+  'the',
+  'las',
+  'los',
+  'la',
+  'el',
+  'de',
+  'del',
+];
+
+export function normalizeRoomName(value: string): string {
+  const withoutAccents = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const wordList = withoutAccents
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 0);
+  const meaningfulWordList = wordList.filter(
+    (word) => !ROOM_FILLER_WORD_LIST.includes(word),
+  );
+  return (meaningfulWordList.length > 0 ? meaningfulWordList : wordList).join('');
+}
+
 export function findRoomByName(
   snapshot: HueHomeSnapshot,
   roomQuery: string,
 ): HueRoomState | null {
-  const normalized = roomQuery.trim().toLowerCase();
+  const normalized = normalizeRoomName(roomQuery);
+  if (normalized.length === 0) {
+    return null;
+  }
+  const normalizedRoomList = snapshot.roomList.map((room) => ({
+    room,
+    normalizedName: normalizeRoomName(room.name),
+  }));
   return (
-    snapshot.roomList.find((room) => room.name.toLowerCase() === normalized) ??
-    snapshot.roomList.find((room) => room.name.toLowerCase().includes(normalized)) ??
+    normalizedRoomList.find((candidate) => candidate.normalizedName === normalized)
+      ?.room ??
+    normalizedRoomList.find(
+      (candidate) =>
+        candidate.normalizedName.includes(normalized) ||
+        normalized.includes(candidate.normalizedName),
+    )?.room ??
     null
   );
 }

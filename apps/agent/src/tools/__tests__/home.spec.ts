@@ -233,7 +233,7 @@ describe('set_light', () => {
       );
       expect(outcome.status).toBe('needs_confirm');
       expect(outcome.status === 'needs_confirm' && outcome.pending.summary).toBe(
-        'Apagar luces de Living',
+        '¿Apago las luces de Living?',
       );
       expect(writes()).toEqual([]);
     } finally {
@@ -315,5 +315,87 @@ describe('set_scene', () => {
     } finally {
       restore();
     }
+  });
+});
+
+describe('spoken-argument tolerance', () => {
+  it('matches a room said in English, with spaces or accents', async () => {
+    const { restore, writes } = installRecordingHueFetch();
+    try {
+      for (const room of [
+        'living room',
+        'The Living Room',
+        'living lights',
+        'las luces del Living',
+      ]) {
+        const result = await setLightTool.handler(
+          { room, on: true },
+          createLinkedContext(),
+        );
+        expect(result).toEqual({ ok: true, summary: 'Luces de Living encendidas.' });
+      }
+      expect(writes()).toHaveLength(4);
+    } finally {
+      restore();
+    }
+  });
+
+  it('accepts on as a string or number instead of throwing', async () => {
+    const { restore, writes } = installRecordingHueFetch();
+    try {
+      for (const on of ['true', 'off', 1, 0, 'apagar']) {
+        const result = await setLightTool.handler(
+          { room: 'Living', on },
+          createLinkedContext(),
+        );
+        expect(result.ok).toBe(true);
+      }
+      expect(writes()).toHaveLength(5);
+    } finally {
+      restore();
+    }
+  });
+
+  it('returns a spoken failure (never throws) on unusable arguments', async () => {
+    const { restore, writes } = installRecordingHueFetch();
+    try {
+      const result = await setLightTool.handler({ on: 'maybe' }, createLinkedContext());
+      expect(result.ok).toBe(false);
+      expect(writes()).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('asks the confirmation as a question', () => {
+    expect(setLightTool.buildConfirmSummary?.({ room: 'Tvlights', on: true })).toBe(
+      '¿Enciendo las luces de Tvlights?',
+    );
+    expect(setLightTool.buildConfirmSummary?.({ room: 'Living', on: false })).toBe(
+      '¿Apago las luces de Living?',
+    );
+  });
+});
+
+describe('tool router isolation', () => {
+  it('turns a throwing handler into a tool failure instead of failing the turn', async () => {
+    const throwingTool = {
+      name: 'boom',
+      safety: 'safe' as const,
+      description: 'x',
+      parameters: {},
+      handler: async () => {
+        throw new Error('kaboom');
+      },
+    };
+    const outcome = await executeToolByName(
+      new Map([[throwingTool.name, throwingTool]]),
+      'boom',
+      {},
+      createLinkedContext(),
+    );
+    expect(outcome.status).toBe('done');
+    expect(outcome.status === 'done' && outcome.result.ok).toBe(false);
+    expect(outcome.status === 'done' && outcome.result.summary).toContain('kaboom');
   });
 });

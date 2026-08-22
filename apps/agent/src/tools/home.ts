@@ -71,7 +71,8 @@ export const lightStatusTool: ToolDefinition = {
     additionalProperties: false,
   },
   async handler(args, context) {
-    const parsedArgs = lightStatusArgsSchema.parse(args);
+    const parsedResult = lightStatusArgsSchema.safeParse(args);
+    const parsedArgs = parsedResult.success ? parsedResult.data : { room: undefined };
     try {
       const snapshot = await readHueHomeSnapshot(context.environment);
       if (parsedArgs.room !== undefined) {
@@ -106,17 +107,47 @@ export const lightStatusTool: ToolDefinition = {
 
 // --- Mutations (safety:'unsafe' → tap-confirm on the device) ---
 
+// The model is the caller here, and it sends "true"/"on"/"1" as often as a
+// real boolean. Coerce instead of throwing: a ZodError escaping a handler kills
+// the whole turn (the device just shows "Error"), so every argument problem has
+// to come back as an ordinary spoken tool failure.
+const onValueSchema = z.union([
+  z.boolean(),
+  z
+    .string()
+    .transform((value) => value.trim().toLowerCase())
+    .refine((value) =>
+      ['true', 'false', 'on', 'off', '1', '0', 'encender', 'apagar', 'prender'].includes(
+        value,
+      ),
+    )
+    .transform((value) => ['true', 'on', '1', 'encender', 'prender'].includes(value)),
+  z.number().transform((value) => value !== 0),
+]);
+
+const brightnessValueSchema = z.coerce.number().int().min(1).max(100);
+
 const setLightArgsSchema = z.object({
   room: z.string().trim().min(1),
-  on: z.boolean(),
-  brightness: z.number().int().min(1).max(100).optional(),
+  on: onValueSchema,
+  brightness: brightnessValueSchema.optional(),
 });
+
+function describeInvalidArguments(toolName: string): ToolExecutionResult {
+  return {
+    ok: false,
+    summary:
+      toolName === 'set_scene'
+        ? 'Necesito la habitación y el nombre de la escena.'
+        : 'Necesito saber qué habitación y si la prendo o la apago.',
+  };
+}
 
 export const setLightTool: ToolDefinition = {
   name: 'set_light',
   safety: 'unsafe',
   description:
-    'Enciende o apaga las luces de UNA habitación, opcionalmente con brillo 1-100. Siempre requiere el nombre de la habitación; no existe "toda la casa".',
+    'Enciende o apaga las luces de UNA habitación (turn the lights on/off in one room), opcionalmente con brillo 1-100. room acepta el nombre tal como lo dice el usuario, en español o inglés. Siempre requiere habitación: no existe "toda la casa" ni "all off".',
   parameters: {
     type: 'object',
     properties: {
@@ -129,15 +160,19 @@ export const setLightTool: ToolDefinition = {
   },
   buildConfirmSummary(args) {
     const parsedArgs = setLightArgsSchema.parse(args);
-    const action = parsedArgs.on ? 'Encender' : 'Apagar';
+    const action = parsedArgs.on ? 'Enciendo' : 'Apago';
     const brightness =
       parsedArgs.on && parsedArgs.brightness !== undefined
         ? ` al ${parsedArgs.brightness}%`
         : '';
-    return `${action} luces de ${parsedArgs.room}${brightness}`;
+    return `¿${action} las luces de ${parsedArgs.room}${brightness}?`;
   },
   async handler(args, context) {
-    const parsedArgs = setLightArgsSchema.parse(args);
+    const parsedResult = setLightArgsSchema.safeParse(args);
+    if (!parsedResult.success) {
+      return describeInvalidArguments('set_light');
+    }
+    const parsedArgs = parsedResult.data;
     try {
       const resolved = await resolveRoomOrFail(context.environment, parsedArgs.room);
       if (typeof resolved === 'string') {
@@ -183,10 +218,14 @@ export const setSceneTool: ToolDefinition = {
   },
   buildConfirmSummary(args) {
     const parsedArgs = setSceneArgsSchema.parse(args);
-    return `Escena ${parsedArgs.scene} en ${parsedArgs.room}`;
+    return `¿Activo la escena ${parsedArgs.scene} en ${parsedArgs.room}?`;
   },
   async handler(args, context) {
-    const parsedArgs = setSceneArgsSchema.parse(args);
+    const parsedResult = setSceneArgsSchema.safeParse(args);
+    if (!parsedResult.success) {
+      return describeInvalidArguments('set_scene');
+    }
+    const parsedArgs = parsedResult.data;
     try {
       const resolved = await resolveRoomOrFail(context.environment, parsedArgs.room);
       if (typeof resolved === 'string') {

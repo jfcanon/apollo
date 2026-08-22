@@ -346,10 +346,17 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
       );
       if (outcome.status === 'needs_confirm') {
         uiEventList.push('NEED_CONFIRM');
+        // The confirmation question is spoken, not only drawn: the device is
+        // used from across the room, where a silent card reads as a dead turn.
+        // A TTS failure must not sink the confirmation itself.
+        const confirmAudio = await input.adapters
+          .tts(outcome.pending.summary, APOLLO_TTS_VOICE)
+          .catch(() => undefined);
         return {
           uiEventList,
           transcript: userText,
           spokenText: outcome.pending.summary,
+          ...(confirmAudio !== undefined ? { ttsAudio: confirmAudio } : {}),
           pendingConfirmation: outcome.pending,
           speechMode: input.speechMode,
           focusState: input.focusState,

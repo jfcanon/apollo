@@ -68,8 +68,30 @@ export async function executeToolByName(
     };
   }
 
-  const result = await toolDefinition.handler(toolArgs, context);
-  return { status: 'done', result };
+  return {
+    status: 'done',
+    result: await runToolHandler(toolDefinition, toolArgs, context),
+  };
+}
+
+// A handler that throws would otherwise fail the whole turn — the device shows
+// a bare "Error" and says nothing. Tool failures are ordinary results the model
+// can read and retry, so no handler is allowed to escape.
+async function runToolHandler(
+  toolDefinition: ToolDefinition,
+  toolArgs: unknown,
+  context: ToolExecutionContext,
+): Promise<ToolExecutionResult> {
+  try {
+    return await toolDefinition.handler(toolArgs, context);
+  } catch (error) {
+    return {
+      ok: false,
+      summary: `No pude ejecutar ${toolDefinition.name} (${
+        error instanceof Error ? error.message : 'error desconocido'
+      })`,
+    };
+  }
 }
 
 export async function resolvePendingToolConfirmation(
@@ -91,7 +113,7 @@ export async function resolvePendingToolConfirmation(
       summary: `Herramienta desconocida: ${pendingConfirmation.toolName}`,
     };
   }
-  return toolDefinition.handler(pendingConfirmation.args, context);
+  return runToolHandler(toolDefinition, pendingConfirmation.args, context);
 }
 
 export function buildToolDefinitionMap(
