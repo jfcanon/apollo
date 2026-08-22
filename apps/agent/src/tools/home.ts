@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { activateRoomScene, resolveRoomOrFail, setRoomLights } from '@/home/control';
 import { findRoomByName, readHueHomeSnapshot } from '@/home/state';
 import type { HueLightState, HueRoomState } from '@/home/state';
 import type { ToolDefinition, ToolExecutionResult } from '@/tools/types';
@@ -48,9 +49,14 @@ export const listRoomsTool: ToolDefinition = {
   },
 };
 
-const lightStatusArgsSchema = z.object({
-  room: z.string().min(1).optional(),
-});
+// Tolerant on purpose: a null/empty room from the model means "whole house",
+// never a thrown ZodError that fails the turn.
+const lightStatusArgsSchema = z
+  .object({ room: z.string().nullish() })
+  .nullish()
+  .transform((value) => ({
+    room: value?.room?.trim() ? value.room.trim() : undefined,
+  }));
 
 export const lightStatusTool: ToolDefinition = {
   name: 'light_status',
@@ -91,6 +97,112 @@ export const lightStatusTool: ToolDefinition = {
         ok: true,
         summary: `Encendidas: ${onList.map(describeLight).join(', ')}.`,
         data: snapshot,
+      };
+    } catch (error) {
+      return failure(error);
+    }
+  },
+};
+
+// --- Mutations (safety:'unsafe' → tap-confirm on the device) ---
+
+const setLightArgsSchema = z.object({
+  room: z.string().trim().min(1),
+  on: z.boolean(),
+  brightness: z.number().int().min(1).max(100).optional(),
+});
+
+export const setLightTool: ToolDefinition = {
+  name: 'set_light',
+  safety: 'unsafe',
+  description:
+    'Enciende o apaga las luces de UNA habitación, opcionalmente con brillo 1-100. Siempre requiere el nombre de la habitación; no existe "toda la casa".',
+  parameters: {
+    type: 'object',
+    properties: {
+      room: { type: 'string', description: 'Nombre de la habitación' },
+      on: { type: 'boolean' },
+      brightness: { type: 'integer', minimum: 1, maximum: 100 },
+    },
+    required: ['room', 'on'],
+    additionalProperties: false,
+  },
+  buildConfirmSummary(args) {
+    const parsedArgs = setLightArgsSchema.parse(args);
+    const action = parsedArgs.on ? 'Encender' : 'Apagar';
+    const brightness =
+      parsedArgs.on && parsedArgs.brightness !== undefined
+        ? ` al ${parsedArgs.brightness}%`
+        : '';
+    return `${action} luces de ${parsedArgs.room}${brightness}`;
+  },
+  async handler(args, context) {
+    const parsedArgs = setLightArgsSchema.parse(args);
+    try {
+      const resolved = await resolveRoomOrFail(context.environment, parsedArgs.room);
+      if (typeof resolved === 'string') {
+        return { ok: false, summary: resolved };
+      }
+      const result = await setRoomLights(context.environment, resolved.room, parsedArgs);
+      if (!result.ok) {
+        return {
+          ok: false,
+          summary: `No pude cambiar las luces de ${resolved.room.name} (${result.error})`,
+        };
+      }
+      return {
+        ok: true,
+        summary: parsedArgs.on
+          ? `Luces de ${resolved.room.name} encendidas.`
+          : `Luces de ${resolved.room.name} apagadas.`,
+      };
+    } catch (error) {
+      return failure(error);
+    }
+  },
+};
+
+const setSceneArgsSchema = z.object({
+  room: z.string().trim().min(1),
+  scene: z.string().trim().min(1),
+});
+
+export const setSceneTool: ToolDefinition = {
+  name: 'set_scene',
+  safety: 'unsafe',
+  description:
+    'Activa una escena de Hue en UNA habitación (ej: Relax, Bright, Nightlight). Requiere habitación y nombre de escena.',
+  parameters: {
+    type: 'object',
+    properties: {
+      room: { type: 'string' },
+      scene: { type: 'string' },
+    },
+    required: ['room', 'scene'],
+    additionalProperties: false,
+  },
+  buildConfirmSummary(args) {
+    const parsedArgs = setSceneArgsSchema.parse(args);
+    return `Escena ${parsedArgs.scene} en ${parsedArgs.room}`;
+  },
+  async handler(args, context) {
+    const parsedArgs = setSceneArgsSchema.parse(args);
+    try {
+      const resolved = await resolveRoomOrFail(context.environment, parsedArgs.room);
+      if (typeof resolved === 'string') {
+        return { ok: false, summary: resolved };
+      }
+      const result = await activateRoomScene(
+        context.environment,
+        resolved.room,
+        parsedArgs.scene,
+      );
+      if (!result.ok) {
+        return { ok: false, summary: result.error };
+      }
+      return {
+        ok: true,
+        summary: `Escena ${parsedArgs.scene} activada en ${resolved.room.name}.`,
       };
     } catch (error) {
       return failure(error);

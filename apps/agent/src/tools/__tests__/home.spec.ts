@@ -155,3 +155,165 @@ describe('light_status', () => {
     }
   });
 });
+
+describe('light_status argument tolerance', () => {
+  it('treats null/empty room and missing args as whole-house', async () => {
+    const restore = installFakeHueFetch();
+    try {
+      for (const args of [
+        undefined,
+        null,
+        {},
+        { room: null },
+        { room: '' },
+        { room: '  ' },
+      ]) {
+        const result = await lightStatusTool.handler(args, createLinkedContext());
+        expect(result.summary).toBe('Encendidas: Lámpara al 80%.');
+      }
+    } finally {
+      restore();
+    }
+  });
+});
+
+import { createBuiltinToolDefinitionMap } from '@/tools/catalog';
+import { setLightTool, setSceneTool } from '@/tools/home';
+import { executeToolByName } from '@/tools/router';
+
+const SCENES = {
+  data: [
+    {
+      id: 'sc-living-bright',
+      metadata: { name: 'Bright' },
+      group: { rid: 'room-living', rtype: 'room' },
+    },
+    {
+      id: 'sc-bed-bright',
+      metadata: { name: 'Bright' },
+      group: { rid: 'room-bed', rtype: 'room' },
+    },
+  ],
+};
+
+function installRecordingHueFetch(): {
+  restore: () => void;
+  writes: () => readonly { url: string; body: unknown }[];
+} {
+  const original = globalThis.fetch;
+  const writes: { url: string; body: unknown }[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (init?.method === 'PUT') {
+      writes.push({ url, body: JSON.parse(String(init.body)) });
+      return Response.json({ data: [] });
+    }
+    if (url.endsWith('/resource/room')) return Response.json(ROOMS);
+    if (url.endsWith('/resource/light')) return Response.json(LIGHTS);
+    if (url.endsWith('/resource/scene')) return Response.json(SCENES);
+    return new Response('not found', { status: 404 });
+  }) as typeof fetch;
+  return {
+    restore: () => {
+      globalThis.fetch = original;
+    },
+    writes: () => writes,
+  };
+}
+
+describe('set_light', () => {
+  it('is unsafe: an unconfirmed call mutates nothing and asks for confirmation', async () => {
+    const { restore, writes } = installRecordingHueFetch();
+    try {
+      const outcome = await executeToolByName(
+        createBuiltinToolDefinitionMap(),
+        'set_light',
+        { room: 'Living', on: false },
+        createLinkedContext(),
+      );
+      expect(outcome.status).toBe('needs_confirm');
+      expect(outcome.status === 'needs_confirm' && outcome.pending.summary).toBe(
+        'Apagar luces de Living',
+      );
+      expect(writes()).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('writes the room grouped_light once confirmed', async () => {
+    const { restore, writes } = installRecordingHueFetch();
+    try {
+      const result = await setLightTool.handler(
+        { room: 'living', on: true, brightness: 40 },
+        createLinkedContext(),
+      );
+      expect(result).toEqual({ ok: true, summary: 'Luces de Living encendidas.' });
+      expect(writes()).toEqual([
+        {
+          url: 'https://api.meethue.com/route/clip/v2/resource/grouped_light/gl-1',
+          body: { on: { on: true }, dimming: { brightness: 40 } },
+        },
+      ]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('fails closed on an unknown room without writing', async () => {
+    const { restore, writes } = installRecordingHueFetch();
+    try {
+      const result = await setLightTool.handler(
+        { room: 'garage', on: false },
+        createLinkedContext(),
+      );
+      expect(result).toEqual({
+        ok: false,
+        summary: 'No encuentro la habitación garage.',
+      });
+      expect(writes()).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('has no whole-house form: room is required by schema', () => {
+    expect(() => setLightTool.buildConfirmSummary?.({ on: false })).toThrow();
+  });
+});
+
+describe('set_scene', () => {
+  it('recalls the scene belonging to the named room, not a same-named one elsewhere', async () => {
+    const { restore, writes } = installRecordingHueFetch();
+    try {
+      const result = await setSceneTool.handler(
+        { room: 'Dormitorio', scene: 'bright' },
+        createLinkedContext(),
+      );
+      expect(result.ok).toBe(true);
+      expect(writes()).toEqual([
+        {
+          url: 'https://api.meethue.com/route/clip/v2/resource/scene/sc-bed-bright',
+          body: { recall: { action: 'active' } },
+        },
+      ]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('fails closed when the room lacks the scene and lists what it has', async () => {
+    const { restore, writes } = installRecordingHueFetch();
+    try {
+      const result = await setSceneTool.handler(
+        { room: 'Living', scene: 'Relax' },
+        createLinkedContext(),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.summary).toContain('Tiene: Bright');
+      expect(writes()).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+});

@@ -3,7 +3,7 @@ import { deviceStatusTool, setBrightnessTool, setVolumeTool } from '@/tools/devi
 import { dollarRateTool } from '@/tools/dollar';
 import { sendEmailTool } from '@/tools/email';
 import { setFocusTool, clearFocusTool } from '@/tools/focus';
-import { lightStatusTool, listRoomsTool } from '@/tools/home';
+import { lightStatusTool, listRoomsTool, setLightTool, setSceneTool } from '@/tools/home';
 import { addToListTool, readListTool, removeFromListTool } from '@/tools/list';
 import { setWeatherLocationTool } from '@/tools/location';
 import { recallMemoryTool, rememberFactTool } from '@/tools/memory';
@@ -47,6 +47,8 @@ export function listBuiltinToolDefinitionList(): readonly ToolDefinition[] {
     startCodingTaskTool,
     listRoomsTool,
     lightStatusTool,
+    setLightTool,
+    setSceneTool,
   ];
 }
 
