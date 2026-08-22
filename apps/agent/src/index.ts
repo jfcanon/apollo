@@ -3,6 +3,7 @@ import { Sandbox } from '@cloudflare/sandbox';
 
 import { authorizeApolloConnection, Apollo } from '@/agents/apollo';
 import { handleBrainProxyRequest } from '@/brain/proxy';
+import { HUE_OAUTH_PATH_PREFIX, handleHueOauthRequest } from '@/home/oauth';
 import { CODING_PROXY_PATH_PREFIX, handleCodingLlmProxyRequest } from '@/coding/proxy';
 import { handleOtaRequest } from '@/ota/routes';
 import { consumeApolloQueueBatch } from '@/queues/consume';
@@ -25,6 +26,10 @@ export default {
 
     if (requestUrl.pathname.startsWith('/ota/')) {
       return handleOtaRequest(request, requestUrl, environment);
+    }
+
+    if (requestUrl.pathname.startsWith(`${HUE_OAUTH_PATH_PREFIX}/`)) {
+      return handleHueOauthRequest(requestUrl, environment);
     }
 
     if (requestUrl.pathname.startsWith('/brain/')) {

@@ -37,6 +37,10 @@ interface Env {
   CODING_PROXY_ORIGIN?: string;
   CODING_ENGINE?: string;
   FIRMWARE_PUSH_DISABLED?: string;
+  HUE_CLIENT_ID?: string;
+  HUE_CLIENT_SECRET?: string;
+  HUE_OAUTH_ENABLED?: string;
+  HUE_TOKENS?: KVNamespace;
 }
 
 declare namespace Cloudflare {
@@ -92,5 +96,9 @@ declare namespace Cloudflare {
     CODING_PROXY_ORIGIN?: string;
     CODING_ENGINE?: string;
     FIRMWARE_PUSH_DISABLED?: string;
+    HUE_CLIENT_ID?: string;
+    HUE_CLIENT_SECRET?: string;
+    HUE_OAUTH_ENABLED?: string;
+    HUE_TOKENS?: KVNamespace;
   }
 }

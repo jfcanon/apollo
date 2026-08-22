@@ -45,6 +45,14 @@
       "new_sqlite_classes": ["Apollo"],
     },
   ],
+  "kv_namespaces": [
+    {
+      // Hue Remote API OAuth tokens + application key. Rotating values only;
+      // the client id/secret are Worker secrets (HUE_CLIENT_ID/HUE_CLIENT_SECRET).
+      "binding": "HUE_TOKENS",
+      "id": "81aeb6dd222441e191c4382b756245b2",
+    },
+  ],
   "r2_buckets": [
     {
       "binding": "MEDIA",
