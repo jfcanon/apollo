@@ -1,3 +1,4 @@
+import { nextEventsTool } from '@/tools/calendar';
 import { listCodingRepositoriesTool, startCodingTaskTool } from '@/tools/coding';
 import { deviceStatusTool, setBrightnessTool, setVolumeTool } from '@/tools/device';
 import { dollarRateTool } from '@/tools/dollar';
@@ -29,6 +30,7 @@ export function listBuiltinToolDefinitionList(): readonly ToolDefinition[] {
   return [
     weatherNowTool,
     setWeatherLocationTool,
+    nextEventsTool,
     rememberFactTool,
     setFocusTool,
     clearFocusTool,

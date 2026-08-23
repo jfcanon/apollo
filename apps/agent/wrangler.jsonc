@@ -52,6 +52,13 @@
       "binding": "HUE_TOKENS",
       "id": "81aeb6dd222441e191c4382b756245b2",
     },
+    {
+      // Google OAuth tokens for the calendar tools, plus the short-lived state
+      // nonces the one-shot link flow issues. Rotating values only; the client
+      // id/secret are Worker secrets (GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET).
+      "binding": "GOOGLE_TOKENS",
+      "id": "4029e26a38a14745b63907d94a1770a1",
+    },
   ],
   "r2_buckets": [
     {
