@@ -11,6 +11,14 @@ import { cancelReminderTool, listRemindersTool, setReminderTool } from '@/tools/
 import { buildToolDefinitionMap } from '@/tools/router';
 import { startResearchTool } from '@/tools/research';
 import { sandboxExecTool, sandboxRunCodeTool } from '@/tools/sandbox';
+import {
+  syncBoxPairTool,
+  syncBoxSetAddressTool,
+  syncBoxSetModeTool,
+  syncBoxSetSourceTool,
+  syncBoxSetSyncTool,
+  syncBoxStatusTool,
+} from '@/tools/syncbox';
 import { setTimerTool, startPomodoroTool } from '@/tools/timer';
 import { translateTool } from '@/tools/translate';
 import { webSearchTool } from '@/tools/web';
@@ -49,6 +57,12 @@ export function listBuiltinToolDefinitionList(): readonly ToolDefinition[] {
     lightStatusTool,
     setLightTool,
     setSceneTool,
+    syncBoxStatusTool,
+    syncBoxSetSyncTool,
+    syncBoxSetModeTool,
+    syncBoxSetSourceTool,
+    syncBoxSetAddressTool,
+    syncBoxPairTool,
   ];
 }
 
