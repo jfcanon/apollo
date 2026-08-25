@@ -7,6 +7,7 @@ import { GOOGLE_OAUTH_PATH_PREFIX, handleGoogleOauthRequest } from '@/google/rou
 import { HUE_OAUTH_PATH_PREFIX, handleHueOauthRequest } from '@/home/oauth';
 import { HUE_PROXY_PATH_PREFIX, handleHueProxyRequest } from '@/home/proxy';
 import { CODING_PROXY_PATH_PREFIX, handleCodingLlmProxyRequest } from '@/coding/proxy';
+import { CONSOLE_PATH, handleConsoleRequest } from '@/console/route';
 import { handleOtaRequest } from '@/ota/routes';
 import { consumeApolloQueueBatch } from '@/queues/consume';
 import { ApolloBackground } from '@/workflows/background';
@@ -24,6 +25,10 @@ export default {
         name: 'apollo',
         features: ['session', 'vectorize', 'r2', 'queues', 'workflows'],
       });
+    }
+
+    if (requestUrl.pathname === CONSOLE_PATH) {
+      return handleConsoleRequest(requestUrl, environment);
     }
 
     if (requestUrl.pathname.startsWith('/ota/')) {

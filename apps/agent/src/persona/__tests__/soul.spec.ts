@@ -45,3 +45,12 @@ describe('installed tool prompt note', () => {
     expect(promptNote).toContain('mcp_linear_list_teams');
   });
 });
+
+describe('dialogue posture', () => {
+  it('tells the model to converse rather than interview, since the phone keeps the mic open', () => {
+    const prompt = buildApolloSoulPrompt('default');
+    expect(prompt).toContain('conversation, not an interview');
+    // The listen marker still has to survive: turn/run.ts parses it literally.
+    expect(prompt).toContain('[[escucho]]');
+  });
+});
