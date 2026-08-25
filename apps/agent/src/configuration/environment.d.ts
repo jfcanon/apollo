@@ -41,6 +41,10 @@ interface Env {
   HUE_CLIENT_SECRET?: string;
   HUE_OAUTH_ENABLED?: string;
   HUE_TOKENS?: KVNamespace;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GOOGLE_OAUTH_ENABLED?: string;
+  GOOGLE_TOKENS?: KVNamespace;
 }
 
 declare namespace Cloudflare {
@@ -100,5 +104,9 @@ declare namespace Cloudflare {
     HUE_CLIENT_SECRET?: string;
     HUE_OAUTH_ENABLED?: string;
     HUE_TOKENS?: KVNamespace;
+    GOOGLE_CLIENT_ID?: string;
+    GOOGLE_CLIENT_SECRET?: string;
+    GOOGLE_OAUTH_ENABLED?: string;
+    GOOGLE_TOKENS?: KVNamespace;
   }
 }

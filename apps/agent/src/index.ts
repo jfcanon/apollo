@@ -3,6 +3,7 @@ import { Sandbox } from '@cloudflare/sandbox';
 
 import { authorizeApolloConnection, Apollo } from '@/agents/apollo';
 import { handleBrainProxyRequest } from '@/brain/proxy';
+import { GOOGLE_OAUTH_PATH_PREFIX, handleGoogleOauthRequest } from '@/google/routes';
 import { HUE_OAUTH_PATH_PREFIX, handleHueOauthRequest } from '@/home/oauth';
 import { HUE_PROXY_PATH_PREFIX, handleHueProxyRequest } from '@/home/proxy';
 import { CODING_PROXY_PATH_PREFIX, handleCodingLlmProxyRequest } from '@/coding/proxy';
@@ -27,6 +28,10 @@ export default {
 
     if (requestUrl.pathname.startsWith('/ota/')) {
       return handleOtaRequest(request, requestUrl, environment);
+    }
+
+    if (requestUrl.pathname.startsWith(`${GOOGLE_OAUTH_PATH_PREFIX}/`)) {
+      return handleGoogleOauthRequest(requestUrl, environment);
     }
 
     if (requestUrl.pathname.startsWith(`${HUE_OAUTH_PATH_PREFIX}/`)) {
