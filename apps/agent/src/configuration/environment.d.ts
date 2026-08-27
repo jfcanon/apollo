@@ -15,6 +15,7 @@ interface Env {
   LLM_MODEL?: string;
   LLM_EXTRA_BODY?: string;
   STT_LANGUAGE?: string;
+  LOCAL_STT_URL?: string;
   AURA_SPEAKER?: string;
   BRAIN_URL?: string;
   BRAIN_ACCESS_CLIENT_ID?: string;
@@ -61,6 +62,7 @@ declare namespace Cloudflare {
     LLM_MODEL?: string;
     LLM_EXTRA_BODY?: string;
     STT_LANGUAGE?: string;
+    LOCAL_STT_URL?: string;
     AURA_SPEAKER?: string;
     BRAIN_URL?: string;
     BRAIN_ACCESS_CLIENT_ID?: string;

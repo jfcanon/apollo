@@ -19,6 +19,9 @@
     "LLM_BASE_URL": "https://api.deepseek.com",
     "LLM_MODEL": "deepseek-chat",
     "STT_LANGUAGE": "en",
+    // Tunnel URL for the local Whisper STT server (NID-515). Only used when
+    // VOICE_PROVIDER selects the local provider.
+    "LOCAL_STT_URL": "https://stt.ygdcbtmc4u.uk",
     "AURA_SPEAKER": "draco",
     "BRAIN_URL": "https://brain.ygdcbtmc4u.uk",
     "WORKERSAI_TTS_MODEL": "@cf/deepgram/aura-2-en",
