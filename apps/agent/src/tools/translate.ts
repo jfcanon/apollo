@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ToolDefinition } from '@/tools/types';
-import { chatWithOpenRouter } from '@/voice/llm';
+import { chatWithLlm } from '@/voice/llm';
 
 const translateArgsSchema = z.object({
   text: z.string().min(1).max(8000),
@@ -31,9 +31,10 @@ export const translateTool: ToolDefinition = {
         : `Idioma de origen: ${parsedArgs.sourceLanguage}.`;
 
     try {
-      const chatResult = await chatWithOpenRouter({
-        openRouterApiKey: context.environment.OPENROUTER_API_KEY,
-        modelId: context.environment.OPENROUTER_MODEL,
+      const chatResult = await chatWithLlm({
+        apiKey: context.environment.LLM_API_KEY ?? '',
+        baseUrl: context.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+        modelId: context.environment.LLM_MODEL ?? 'deepseek-chat',
         messageList: [
           {
             role: 'system',

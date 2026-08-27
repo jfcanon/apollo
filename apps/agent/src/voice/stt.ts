@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const openRouterTranscriptionResponseSchema = z.object({
+const groqTranscriptionResponseSchema = z.object({
   text: z.string().optional(),
 });
 
@@ -13,38 +13,33 @@ function encodeArrayBufferAsBase64(arrayBuffer: ArrayBuffer): string {
   return btoa(binaryString);
 }
 
-export async function transcribeAudioWithOpenRouter(input: {
+export async function transcribeAudioWithGroq(input: {
   readonly audioBuffer: ArrayBuffer;
-  readonly openRouterApiKey: string;
-  readonly modelId: string;
+  readonly groqApiKey: string;
+  readonly modelId?: string;
   readonly languageCode?: string;
   readonly audioFormat?: string;
   readonly fetchImplementation?: typeof fetch;
 }): Promise<string> {
   const fetchImplementation = input.fetchImplementation ?? globalThis.fetch;
+  const modelId = input.modelId ?? 'whisper-large-v3-turbo';
   const response = await fetchImplementation(
-    'https://openrouter.ai/api/v1/audio/transcriptions',
+    'https://api.groq.com/openai/v1/audio/transcriptions',
     {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${input.openRouterApiKey}`,
+        Authorization: `Bearer ${input.groqApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: input.modelId,
+        model: modelId,
         language: input.languageCode ?? 'es',
-        input_audio: {
-          data: encodeArrayBufferAsBase64(input.audioBuffer),
-          format: input.audioFormat ?? 'wav',
-        },
+        file: `data:audio/wav;base64,${encodeArrayBufferAsBase64(input.audioBuffer)}`,
       }),
     },
   );
 
   if (!response.ok) {
-    // The status alone says nothing actionable: the reason a transcription is
-    // rejected (audio too long, unsupported format, bad model) only ever comes
-    // back in the body.
     const failureDetail = await response.text().catch(() => '');
     const audioKilobytes = Math.round(input.audioBuffer.byteLength / 1024);
     throw new Error(
@@ -52,7 +47,7 @@ export async function transcribeAudioWithOpenRouter(input: {
     );
   }
 
-  const payload = openRouterTranscriptionResponseSchema.parse(await response.json());
+  const payload = groqTranscriptionResponseSchema.parse(await response.json());
   const transcript = payload.text?.trim() ?? '';
   if (transcript.length === 0) {
     throw new Error('STT devolvió texto vacío');

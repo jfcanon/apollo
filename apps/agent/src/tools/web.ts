@@ -35,8 +35,9 @@ export const webSearchTool: ToolDefinition = {
         };
       }
       const answerText = await synthesizeQuickWebAnswer({
-        openRouterApiKey: context.environment.OPENROUTER_API_KEY,
-        modelId: context.environment.OPENROUTER_MODEL,
+        apiKey: context.environment.LLM_API_KEY ?? '',
+        baseUrl: context.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+        modelId: context.environment.LLM_MODEL ?? 'deepseek-chat',
         query: parsedArgs.query,
         currentDateText: formatCurrentDateTimeForPrompt(context.nowMilliseconds),
         sourceList,

@@ -1,4 +1,4 @@
-import { embedTextWithOpenRouter, upsertMemoryVector } from '@/memory/vector';
+import { embedTextWithLlm, upsertMemoryVector } from '@/memory/vector';
 import { parseApolloQueueJob } from '@/queues/jobs';
 
 export async function consumeApolloQueueBatch(
@@ -10,9 +10,10 @@ export async function consumeApolloQueueBatch(
       const job = parseApolloQueueJob(message.body);
 
       if (job.type === 'index_memory') {
-        const values = await embedTextWithOpenRouter({
-          openRouterApiKey: environment.OPENROUTER_API_KEY,
-          modelId: environment.OPENROUTER_EMBEDDING_MODEL,
+        const values = await embedTextWithLlm({
+          apiKey: environment.LLM_API_KEY ?? '',
+          baseUrl: environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+          modelId: environment.LLM_MODEL ?? 'deepseek-chat',
           text: job.content,
         });
         await upsertMemoryVector({

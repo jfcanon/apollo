@@ -13,7 +13,7 @@ import type {
 } from '@/tools/types';
 import { mapToolNameToThinkingCaption } from '@/turn/caption';
 import {
-  buildOpenRouterSystemPrompt,
+  buildLlmSystemPrompt,
   buildSemanticMemoryPromptNote,
   type OpenRouterChatMessage,
 } from '@/voice/llm';
@@ -245,7 +245,7 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
   ];
   const systemPromptBase =
     input.systemPromptOverride === undefined
-      ? buildOpenRouterSystemPrompt({
+      ? buildLlmSystemPrompt({
           soulSystemPrompt: buildApolloSoulPrompt(input.speechMode),
           memoryContentList,
           isFocusActive: input.focusState.active,

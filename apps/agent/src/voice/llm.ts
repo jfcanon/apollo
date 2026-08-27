@@ -55,7 +55,7 @@ const openRouterChatResponseSchema = z.object({
     .min(1),
 });
 
-export function buildOpenRouterSystemPrompt(input: {
+export function buildLlmSystemPrompt(input: {
   readonly soulSystemPrompt: string;
   readonly memoryContentList: readonly string[];
   readonly isFocusActive: boolean;
@@ -196,14 +196,10 @@ async function consumeOpenRouterStream(
   return { text: fullText.trim(), toolCallList };
 }
 
-export async function chatWithOpenRouter(input: {
-  readonly openRouterApiKey: string;
+export async function chatWithLlm(input: {
+  readonly apiKey: string;
   readonly modelId: string;
-  // Any OpenAI-format chat endpoint works here (DeepSeek, self-hosted, ...);
-  // OpenRouter stays the default so upstream behavior is unchanged.
-  readonly baseUrl?: string;
-  // Provider-specific body fields (e.g. disabling DeepSeek thinking mode)
-  // without forking this function per vendor.
+  readonly baseUrl: string;
   readonly extraBody?: Record<string, unknown>;
   readonly messageList: readonly OpenRouterChatMessage[];
   readonly toolDefinitionList?: readonly {
@@ -211,9 +207,6 @@ export async function chatWithOpenRouter(input: {
     readonly description: string;
     readonly parameters: Record<string, unknown>;
   }[];
-  // When given, the request streams over SSE and every content delta lands here
-  // as it arrives, so the caller can start speaking the first sentence while
-  // the model is still writing the rest.
   readonly onTextDelta?: (deltaText: string) => void;
   readonly fetchImplementation?: typeof fetch;
 }): Promise<OpenRouterChatResult> {
@@ -230,25 +223,22 @@ export async function chatWithOpenRouter(input: {
       : undefined;
 
   const fetchImplementation = input.fetchImplementation ?? globalThis.fetch;
-  const response = await fetchImplementation(
-    `${input.baseUrl ?? 'https://openrouter.ai/api/v1'}/chat/completions`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${input.openRouterApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: input.modelId,
-        messages: input.messageList,
-        ...(toolDefinitionPayloadList !== undefined
-          ? { tools: toolDefinitionPayloadList }
-          : {}),
-        ...(input.onTextDelta !== undefined ? { stream: true } : {}),
-        ...input.extraBody,
-      }),
+  const response = await fetchImplementation(`${input.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      'Content-Type': 'application/json',
     },
-  );
+    body: JSON.stringify({
+      model: input.modelId,
+      messages: input.messageList,
+      ...(toolDefinitionPayloadList !== undefined
+        ? { tools: toolDefinitionPayloadList }
+        : {}),
+      ...(input.onTextDelta !== undefined ? { stream: true } : {}),
+      ...input.extraBody,
+    }),
+  });
 
   if (!response.ok) {
     throw new Error(`LLM falló con status ${response.status}`);

@@ -1,7 +1,8 @@
-import { chatWithOpenRouter } from '@/voice/llm';
+import { chatWithLlm } from '@/voice/llm';
 
 export async function synthesizeQuickWebAnswer(input: {
-  readonly openRouterApiKey: string;
+  readonly apiKey: string;
+  readonly baseUrl: string;
   readonly modelId: string;
   readonly query: string;
   readonly currentDateText?: string;
@@ -21,8 +22,9 @@ export async function synthesizeQuickWebAnswer(input: {
     input.currentDateText === undefined
       ? ''
       : ` Hoy es ${input.currentDateText}: priorizá la información más reciente y si una fuente es vieja, aclaralo.`;
-  const chatResult = await chatWithOpenRouter({
-    openRouterApiKey: input.openRouterApiKey,
+  const chatResult = await chatWithLlm({
+    apiKey: input.apiKey,
+    baseUrl: input.baseUrl,
     modelId: input.modelId,
     messageList: [
       {
@@ -41,13 +43,15 @@ export async function synthesizeQuickWebAnswer(input: {
 }
 
 export async function synthesizeResearchSpokenSummary(input: {
-  readonly openRouterApiKey: string;
+  readonly apiKey: string;
+  readonly baseUrl: string;
   readonly modelId: string;
   readonly prompt: string;
   readonly reportMarkdown: string;
 }): Promise<string> {
-  const chatResult = await chatWithOpenRouter({
-    openRouterApiKey: input.openRouterApiKey,
+  const chatResult = await chatWithLlm({
+    apiKey: input.apiKey,
+    baseUrl: input.baseUrl,
     modelId: input.modelId,
     messageList: [
       {

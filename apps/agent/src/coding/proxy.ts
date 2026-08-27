@@ -1,21 +1,19 @@
 import { z } from 'zod';
 
-const OPENROUTER_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
 const proxyRequestBodySchema = z.object({ model: z.string() }).passthrough();
 export const CODING_PROXY_PATH_PREFIX = '/coding-llm/v1';
 export const CODING_PROXY_TOKEN_TTL_MILLISECONDS = 6 * 60 * 60 * 1000;
 
-// The token is signed with the OpenRouter key itself: the worker already holds
+// The token is signed with the LLM API key itself: the worker already holds
 // it, nothing new to provision, and rotating the key revokes every token that
 // ever reached a sandbox.
 async function computeTokenSignature(
-  openRouterApiKey: string,
+  apiKey: string,
   payloadText: string,
 ): Promise<string> {
   const signingKey = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(openRouterApiKey),
+    new TextEncoder().encode(apiKey),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign'],
@@ -32,19 +30,19 @@ async function computeTokenSignature(
 
 export async function mintCodingProxyToken(input: {
   readonly instanceId: string;
-  readonly openRouterApiKey: string;
+  readonly apiKey: string;
   readonly nowMilliseconds: number;
 }): Promise<string> {
   const expiresAtMilliseconds =
     input.nowMilliseconds + CODING_PROXY_TOKEN_TTL_MILLISECONDS;
   const payloadText = `${input.instanceId}.${expiresAtMilliseconds}`;
-  const signature = await computeTokenSignature(input.openRouterApiKey, payloadText);
+  const signature = await computeTokenSignature(input.apiKey, payloadText);
   return `${payloadText}.${signature}`;
 }
 
 export async function verifyCodingProxyToken(input: {
   readonly token: string;
-  readonly openRouterApiKey: string;
+  readonly apiKey: string;
   readonly nowMilliseconds: number;
 }): Promise<boolean> {
   const lastSeparatorIndex = input.token.lastIndexOf('.');
@@ -62,10 +60,7 @@ export async function verifyCodingProxyToken(input: {
   if (input.nowMilliseconds > expiresAtMilliseconds) {
     return false;
   }
-  const expectedSignature = await computeTokenSignature(
-    input.openRouterApiKey,
-    payloadText,
-  );
+  const expectedSignature = await computeTokenSignature(input.apiKey, payloadText);
   if (presentedSignature.length !== expectedSignature.length) {
     return false;
   }
@@ -83,7 +78,7 @@ export async function verifyCodingProxyToken(input: {
 }
 
 // OpenAI-compatible passthrough for the opencode process inside the sandbox:
-// the real OpenRouter key never leaves the worker, and the sandbox only ever
+// the real LLM API key never leaves the worker, and the sandbox only ever
 // sees a short-lived token this route can refuse.
 export async function handleCodingLlmProxyRequest(
   request: Request,
@@ -101,7 +96,7 @@ export async function handleCodingLlmProxyRequest(
   const presentedToken = authorizationHeader.replace(/^Bearer\s+/i, '');
   const isTokenValid = await verifyCodingProxyToken({
     token: presentedToken,
-    openRouterApiKey: environment.OPENROUTER_API_KEY,
+    apiKey: environment.LLM_API_KEY ?? '',
     nowMilliseconds: Date.now(),
   });
   if (!isTokenValid) {
@@ -119,16 +114,19 @@ export async function handleCodingLlmProxyRequest(
   if (!parsedBody.success) {
     return new Response('Bad request', { status: 400 });
   }
-  if (parsedBody.data.model !== environment.OPENROUTER_CODING_MODEL) {
+  if (parsedBody.data.model !== environment.LLM_MODEL) {
     return new Response('Model not allowed', { status: 403 });
   }
 
-  return fetchImplementation(OPENROUTER_CHAT_COMPLETIONS_URL, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${environment.OPENROUTER_API_KEY}`,
-      'content-type': 'application/json',
+  return fetchImplementation(
+    `${environment.LLM_BASE_URL ?? 'https://api.deepseek.com'}/chat/completions`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${environment.LLM_API_KEY}`,
+        'content-type': 'application/json',
+      },
+      body: requestBodyText,
     },
-    body: requestBodyText,
-  });
+  );
 }

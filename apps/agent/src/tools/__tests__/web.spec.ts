@@ -32,7 +32,9 @@ describe('webSearchTool', () => {
         { query: 'algo inexistente' },
         {
           environment: createFakeApolloEnvironment({
-            OPENROUTER_API_KEY: 'key',
+            LLM_API_KEY: 'key',
+            LLM_BASE_URL: 'https://api.deepseek.com',
+            LLM_MODEL: 'deepseek-chat',
             TAVILY_API_KEY: 'tvly-key',
           }),
           nowMilliseconds: 1,
@@ -47,7 +49,7 @@ describe('webSearchTool', () => {
 
   it('returns synthesized answer when sources are available', async () => {
     const mocked = withMockedFetch((requestUrl) => {
-      if (requestUrl.includes('openrouter.ai')) {
+      if (requestUrl.includes('api.deepseek.com')) {
         return new Response(
           JSON.stringify({
             choices: [{ message: { content: 'La capital de Francia es París.' } }],
@@ -75,7 +77,9 @@ describe('webSearchTool', () => {
         { query: 'capital de Francia' },
         {
           environment: createFakeApolloEnvironment({
-            OPENROUTER_API_KEY: 'key',
+            LLM_API_KEY: 'key',
+            LLM_BASE_URL: 'https://api.deepseek.com',
+            LLM_MODEL: 'deepseek-chat',
             TAVILY_API_KEY: 'tvly-key',
           }),
           nowMilliseconds: 1,
@@ -98,7 +102,9 @@ describe('webSearchTool', () => {
         { query: 'algo' },
         {
           environment: createFakeApolloEnvironment({
-            OPENROUTER_API_KEY: 'key',
+            LLM_API_KEY: 'key',
+            LLM_BASE_URL: 'https://api.deepseek.com',
+            LLM_MODEL: 'deepseek-chat',
             TAVILY_API_KEY: 'tvly-invalida',
           }),
           nowMilliseconds: 1,
