@@ -39,7 +39,7 @@ export async function synthesizeApolloSpeech(input: {
   }
 
   if (environment.VOICE_PROVIDER === 'groq') {
-    const voice = environment.GROQ_TTS_VOICE ?? 'tara';
+    const voice = environment.GROQ_TTS_VOICE ?? 'austin';
     const modelId = environment.GROQ_TTS_MODEL ?? 'canopylabs/orpheus-v1-english';
     return synthesizeSpeechThroughCache({
       mediaBucket: environment.MEDIA,

@@ -197,7 +197,7 @@ export async function executeApolloTurn(
               : synthesizeSpeechThroughCache({
                   mediaBucket: dependencies.environment.MEDIA,
                   text,
-                  voiceId: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
+                  voiceId: dependencies.environment.GROQ_TTS_VOICE ?? 'austin',
                   modelId:
                     dependencies.environment.GROQ_TTS_MODEL ??
                     'canopylabs/orpheus-v1-english',
@@ -205,7 +205,7 @@ export async function executeApolloTurn(
                     synthesizeSpeechWithGroq({
                       groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
                       text,
-                      voice: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
+                      voice: dependencies.environment.GROQ_TTS_VOICE ?? 'austin',
                       ...(dependencies.environment.GROQ_TTS_MODEL !== undefined
                         ? { modelId: dependencies.environment.GROQ_TTS_MODEL }
                         : {}),

@@ -69,7 +69,7 @@ describe('synthesizeSpeechWithGroq', () => {
     const pcm = await synthesizeSpeechWithGroq({
       groqApiKey: 'test-key',
       text: 'hola',
-      voice: 'tara',
+      voice: 'austin',
       fetchImplementation: stubTtsFetch(wavBuffer),
     });
 
@@ -89,7 +89,7 @@ describe('synthesizeSpeechWithGroq', () => {
     const pcm = await synthesizeSpeechWithGroq({
       groqApiKey: 'test-key',
       text: 'hola',
-      voice: 'tara',
+      voice: 'austin',
       fetchImplementation: stubTtsFetch(wavBuffer),
     });
 
@@ -108,7 +108,7 @@ describe('synthesizeSpeechWithGroq', () => {
     const pcm = await synthesizeSpeechWithGroq({
       groqApiKey: 'test-key',
       text: 'hola',
-      voice: 'tara',
+      voice: 'austin',
       fetchImplementation: stubTtsFetch(wavBuffer),
     });
 
@@ -127,7 +127,7 @@ describe('synthesizeSpeechWithGroq', () => {
       synthesizeSpeechWithGroq({
         groqApiKey: 'test-key',
         text: 'hola',
-        voice: 'tara',
+        voice: 'austin',
         fetchImplementation: stubTtsFetch(wavBuffer),
       }),
     ).rejects.toThrow(/44100Hz/);
@@ -145,7 +145,7 @@ describe('synthesizeSpeechWithGroq', () => {
       synthesizeSpeechWithGroq({
         groqApiKey: 'test-key',
         text: 'hola',
-        voice: 'tara',
+        voice: 'austin',
         fetchImplementation: stubTtsFetch(wavBuffer),
       }),
     ).rejects.toThrow(/2ch/);
@@ -161,7 +161,7 @@ describe('synthesizeSpeechWithGroq', () => {
       synthesizeSpeechWithGroq({
         groqApiKey: 'test-key',
         text: 'hola',
-        voice: 'tara',
+        voice: 'austin',
         fetchImplementation,
       }),
     ).rejects.toThrow(/terms acceptance/);
