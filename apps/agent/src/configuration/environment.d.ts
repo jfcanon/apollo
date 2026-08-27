@@ -45,6 +45,8 @@ interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_ENABLED?: string;
   GOOGLE_TOKENS?: KVNamespace;
+  TIMON_URL?: string;
+  TIMON_API_KEY?: string;
 }
 
 declare namespace Cloudflare {
@@ -108,5 +110,7 @@ declare namespace Cloudflare {
     GOOGLE_CLIENT_SECRET?: string;
     GOOGLE_OAUTH_ENABLED?: string;
     GOOGLE_TOKENS?: KVNamespace;
+    TIMON_URL?: string;
+    TIMON_API_KEY?: string;
   }
 }

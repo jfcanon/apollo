@@ -21,6 +21,7 @@ import {
   syncBoxStatusTool,
 } from '@/tools/syncbox';
 import { setTimerTool, startPomodoroTool } from '@/tools/timer';
+import { timonCreateTaskTool } from '@/tools/timon';
 import { translateTool } from '@/tools/translate';
 import { webSearchTool } from '@/tools/web';
 import type { ToolDefinition } from '@/tools/types';
@@ -65,6 +66,7 @@ export function listBuiltinToolDefinitionList(): readonly ToolDefinition[] {
     syncBoxSetSourceTool,
     syncBoxSetAddressTool,
     syncBoxPairTool,
+    timonCreateTaskTool,
   ];
 }
 
