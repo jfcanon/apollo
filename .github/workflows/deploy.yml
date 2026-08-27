@@ -1,9 +1,11 @@
 # Deploys the worker on every push to main, after a fresh test run in this
 # job — hermetic on purpose, so the gate holds even if ci.yml changes.
 # Doc-only merges skip it. Requires a `production` environment limited to the
-# main branch, holding two secrets:
+# main branch, holding four secrets:
 #   CLOUDFLARE_API_TOKEN   Workers deploy rights on the account
 #   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account id
+#   TIMON_API_KEY          Timon worker API key (Bitwarden item `timonapikey`)
+#   TIMON_URL              Timon worker base URL
 name: Deploy
 
 on:
@@ -46,6 +48,22 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+      # Provision the Timon bridge secrets before deploying. Values come from
+      # the `production` environment; until the owner sets them this step is
+      # skipped and timon_create_task reports "unconfigured" at runtime rather
+      # than failing the deploy.
+      - name: Configure Timon secrets
+        if: ${{ secrets.TIMON_API_KEY != '' && secrets.TIMON_URL != '' }}
+        working-directory: apps/agent
+        run: |
+          echo "$TIMON_API_KEY" | bunx wrangler secret put TIMON_API_KEY
+          echo "$TIMON_URL" | bunx wrangler secret put TIMON_URL
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TIMON_API_KEY: ${{ secrets.TIMON_API_KEY }}
+          TIMON_URL: ${{ secrets.TIMON_URL }}
 
       # wrangler builds the Sandbox container image as part of the deploy,
       # which is why this runs on the runner's Docker daemon.
