@@ -24,8 +24,7 @@ import type {
 } from '@/tools/types';
 import { runDeskTurn, type VoiceAdapters } from '@/turn/run';
 import { TTS_PCM_CHANNEL_COUNT, TTS_PCM_SAMPLE_RATE_HZ } from '@/voice/elevenlabs';
-import { chatWithOpenRouter } from '@/voice/llm';
-import { transcribeAudioWithOpenRouter } from '@/voice/stt';
+import { chatWithLlm } from '@/voice/llm';
 import { synthesizeSpeechWithGemini } from '@/voice/gemini';
 import { synthesizeSpeechWithGroq, transcribeAudioWithGroq } from '@/voice/groq';
 import {
@@ -93,8 +92,9 @@ export async function executeApolloTurn(
   ): Promise<readonly string[]> =>
     recallSemanticMemoryContent({
       vectorizeIndex: dependencies.environment.VECTORIZE,
-      openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-      embeddingModelId: dependencies.environment.OPENROUTER_EMBEDDING_MODEL,
+      embeddingBaseUrl: dependencies.environment.LLM_BASE_URL ?? '',
+      embeddingApiKey: dependencies.environment.LLM_API_KEY ?? '',
+      embeddingModelId: dependencies.environment.LLM_MODEL ?? '',
       queryText,
       deviceId: dependencies.deviceId,
     });
@@ -155,16 +155,11 @@ export async function executeApolloTurn(
                 : {}),
             }),
           llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
-            chatWithOpenRouter({
-              openRouterApiKey:
-                dependencies.environment.LLM_API_KEY ??
-                dependencies.environment.OPENROUTER_API_KEY,
-              modelId:
-                dependencies.environment.LLM_MODEL ??
-                dependencies.environment.OPENROUTER_MODEL,
-              ...(dependencies.environment.LLM_BASE_URL !== undefined
-                ? { baseUrl: dependencies.environment.LLM_BASE_URL }
-                : {}),
+            chatWithLlm({
+              apiKey: dependencies.environment.LLM_API_KEY ?? '',
+              modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
+              baseUrl:
+                dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
               ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
               messageList,
               toolDefinitionList,
@@ -223,16 +218,11 @@ export async function executeApolloTurn(
                   : {}),
               }),
             llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
-              chatWithOpenRouter({
-                openRouterApiKey:
-                  dependencies.environment.LLM_API_KEY ??
-                  dependencies.environment.OPENROUTER_API_KEY,
-                modelId:
-                  dependencies.environment.LLM_MODEL ??
-                  dependencies.environment.OPENROUTER_MODEL,
-                ...(dependencies.environment.LLM_BASE_URL !== undefined
-                  ? { baseUrl: dependencies.environment.LLM_BASE_URL }
-                  : {}),
+              chatWithLlm({
+                apiKey: dependencies.environment.LLM_API_KEY ?? '',
+                modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
+                baseUrl:
+                  dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
                 ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
                 messageList,
                 toolDefinitionList,
@@ -261,15 +251,22 @@ export async function executeApolloTurn(
           }
         : {
             stt: async (audioBuffer) =>
-              transcribeAudioWithOpenRouter({
+              transcribeAudioWithGroq({
+                groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
                 audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
-                openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-                modelId: dependencies.environment.OPENROUTER_STT_MODEL,
+                ...(dependencies.environment.GROQ_STT_MODEL !== undefined
+                  ? { modelId: dependencies.environment.GROQ_STT_MODEL }
+                  : {}),
+                ...(dependencies.environment.STT_LANGUAGE !== undefined
+                  ? { languageCode: dependencies.environment.STT_LANGUAGE }
+                  : {}),
               }),
             llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
-              chatWithOpenRouter({
-                openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-                modelId: dependencies.environment.OPENROUTER_MODEL,
+              chatWithLlm({
+                apiKey: dependencies.environment.LLM_API_KEY ?? '',
+                modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
+                baseUrl:
+                  dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
                 messageList,
                 toolDefinitionList,
                 ...(onTextDelta !== undefined ? { onTextDelta } : {}),

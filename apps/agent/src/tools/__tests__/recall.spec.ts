@@ -19,7 +19,9 @@ describe('recallMemoryTool', () => {
         { query: 'mate', limit: 3 },
         {
           environment: createFakeApolloEnvironment({
-            OPENROUTER_API_KEY: 'key',
+            LLM_API_KEY: 'key',
+            LLM_BASE_URL: 'https://api.deepseek.com',
+            LLM_MODEL: 'deepseek-chat',
             VECTORIZE: Object.assign({} as Env['VECTORIZE'], {
               query: async () => ({
                 matches: [
@@ -59,7 +61,9 @@ describe('recallMemoryTool', () => {
         { query: 'xyz' },
         {
           environment: createFakeApolloEnvironment({
-            OPENROUTER_API_KEY: 'key',
+            LLM_API_KEY: 'key',
+            LLM_BASE_URL: 'https://api.deepseek.com',
+            LLM_MODEL: 'deepseek-chat',
             VECTORIZE: Object.assign({} as Env['VECTORIZE'], {
               query: async () => ({ matches: [], count: 0 }),
             }),

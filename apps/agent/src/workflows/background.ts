@@ -28,8 +28,9 @@ export class ApolloBackground extends WorkflowEntrypoint<Env, ApolloBackgroundPa
       { retries: { limit: 2, delay: '30 seconds', backoff: 'exponential' } },
       async () =>
         runDeepResearchWithPerplexity({
-          openRouterApiKey: this.env.OPENROUTER_API_KEY,
-          modelId: this.env.OPENROUTER_RESEARCH_MODEL,
+          apiKey: this.env.LLM_API_KEY ?? '',
+          baseUrl: this.env.LLM_BASE_URL ?? 'https://api.deepseek.com',
+          modelId: this.env.LLM_MODEL ?? 'deepseek-chat',
           prompt: event.payload.prompt,
           nowMilliseconds: Date.now(),
         }),
@@ -93,8 +94,9 @@ export class ApolloBackground extends WorkflowEntrypoint<Env, ApolloBackgroundPa
       { retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' } },
       async () =>
         synthesizeResearchSpokenSummary({
-          openRouterApiKey: this.env.OPENROUTER_API_KEY,
-          modelId: this.env.OPENROUTER_MODEL,
+          apiKey: this.env.LLM_API_KEY ?? '',
+          baseUrl: this.env.LLM_BASE_URL ?? 'https://api.deepseek.com',
+          modelId: this.env.LLM_MODEL ?? 'deepseek-chat',
           prompt: event.payload.prompt,
           reportMarkdown,
         }),

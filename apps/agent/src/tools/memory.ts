@@ -55,11 +55,11 @@ export const recallMemoryTool: ToolDefinition = {
     const deviceId = context.deviceId ?? 'default';
 
     try {
-      const { embedTextWithOpenRouter, queryMemoryVectors } =
-        await import('@/memory/vector');
-      const values = await embedTextWithOpenRouter({
-        openRouterApiKey: context.environment.OPENROUTER_API_KEY,
-        modelId: context.environment.OPENROUTER_EMBEDDING_MODEL,
+      const { embedTextWithLlm, queryMemoryVectors } = await import('@/memory/vector');
+      const values = await embedTextWithLlm({
+        apiKey: context.environment.LLM_API_KEY ?? '',
+        baseUrl: context.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+        modelId: context.environment.LLM_MODEL ?? 'deepseek-chat',
         text: parsedArgs.query,
       });
       const matchList = await queryMemoryVectors({

@@ -4,7 +4,7 @@ import { createFakeApolloEnvironment } from '@/configuration/testing';
 import { translateTool } from '@/tools/translate';
 
 describe('translateTool', () => {
-  it('returns translation from OpenRouter', async () => {
+  it('returns translation from LLM', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = Object.assign(
       async () =>
@@ -22,7 +22,9 @@ describe('translateTool', () => {
         { text: 'Hola mundo', targetLanguage: 'english' },
         {
           environment: createFakeApolloEnvironment({
-            OPENROUTER_API_KEY: 'test-key',
+            LLM_API_KEY: 'test-key',
+            LLM_BASE_URL: 'https://api.deepseek.com',
+            LLM_MODEL: 'deepseek-chat',
           }),
           nowMilliseconds: 1,
         },
@@ -56,7 +58,9 @@ describe('translateTool', () => {
         { text: 'Hola mundo', targetLanguage: 'english' },
         {
           environment: createFakeApolloEnvironment({
-            OPENROUTER_API_KEY: 'test-key',
+            LLM_API_KEY: 'test-key',
+            LLM_BASE_URL: 'https://api.deepseek.com',
+            LLM_MODEL: 'deepseek-chat',
           }),
           nowMilliseconds: 1,
         },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { transcribeAudioWithOpenRouter } from '@/voice/stt';
+import { transcribeAudioWithGroq } from '@/voice/stt';
 
 type CapturedFetchCall = {
   readonly url: string;
@@ -30,57 +30,53 @@ function createCapturingFetchMock(
   };
 }
 
-describe('transcribeAudioWithOpenRouter', () => {
-  it('base64-encodes the audio and defaults language/format', async () => {
+describe('transcribeAudioWithGroq', () => {
+  it('base64-encodes the audio and defaults language', async () => {
     const { fetchImplementation, callList } = createCapturingFetchMock({
       text: '  hola apolo  ',
     });
 
-    const transcript = await transcribeAudioWithOpenRouter({
+    const transcript = await transcribeAudioWithGroq({
       audioBuffer: new Uint8Array([1, 2, 3]).buffer,
-      openRouterApiKey: 'key-123',
-      modelId: 'openai/whisper-large-v3',
+      groqApiKey: 'key-123',
+      modelId: 'whisper-large-v3-turbo',
       fetchImplementation,
     });
 
     expect(transcript).toBe('hola apolo');
-    expect(callList[0].url).toBe('https://openrouter.ai/api/v1/audio/transcriptions');
+    expect(callList[0].url).toBe('https://api.groq.com/openai/v1/audio/transcriptions');
     const requestBody = JSON.parse(callList[0].init.body as string) as {
       language: string;
-      input_audio: { data: string; format: string };
+      file: string;
     };
     expect(requestBody.language).toBe('es');
-    expect(requestBody.input_audio.format).toBe('wav');
-    expect(requestBody.input_audio.data).toBe(btoa('\x01\x02\x03'));
+    expect(requestBody.file).toContain('data:audio/wav;base64,');
   });
 
-  it('honors an explicit language and audio format', async () => {
+  it('honors an explicit language', async () => {
     const { fetchImplementation, callList } = createCapturingFetchMock({ text: 'hi' });
 
-    await transcribeAudioWithOpenRouter({
+    await transcribeAudioWithGroq({
       audioBuffer: new Uint8Array([9]).buffer,
-      openRouterApiKey: 'key-123',
-      modelId: 'openai/whisper-large-v3',
+      groqApiKey: 'key-123',
+      modelId: 'whisper-large-v3-turbo',
       languageCode: 'en',
-      audioFormat: 'mp3',
       fetchImplementation,
     });
 
     const requestBody = JSON.parse(callList[0].init.body as string) as {
       language: string;
-      input_audio: { format: string };
     };
     expect(requestBody.language).toBe('en');
-    expect(requestBody.input_audio.format).toBe('mp3');
   });
 
   it('throws on a non-ok response', async () => {
     const { fetchImplementation } = createCapturingFetchMock({}, 500);
     await expect(
-      transcribeAudioWithOpenRouter({
+      transcribeAudioWithGroq({
         audioBuffer: new ArrayBuffer(0),
-        openRouterApiKey: 'key-123',
-        modelId: 'openai/whisper-large-v3',
+        groqApiKey: 'key-123',
+        modelId: 'whisper-large-v3-turbo',
         fetchImplementation,
       }),
     ).rejects.toThrow('STT falló con status 500');
@@ -89,10 +85,10 @@ describe('transcribeAudioWithOpenRouter', () => {
   it('throws when the transcript is empty', async () => {
     const { fetchImplementation } = createCapturingFetchMock({ text: '   ' });
     await expect(
-      transcribeAudioWithOpenRouter({
+      transcribeAudioWithGroq({
         audioBuffer: new ArrayBuffer(0),
-        openRouterApiKey: 'key-123',
-        modelId: 'openai/whisper-large-v3',
+        groqApiKey: 'key-123',
+        modelId: 'whisper-large-v3-turbo',
         fetchImplementation,
       }),
     ).rejects.toThrow('STT devolvió texto vacío');
@@ -101,10 +97,10 @@ describe('transcribeAudioWithOpenRouter', () => {
   it('throws when the response does not match the expected schema', async () => {
     const { fetchImplementation } = createCapturingFetchMock({ text: 42 });
     await expect(
-      transcribeAudioWithOpenRouter({
+      transcribeAudioWithGroq({
         audioBuffer: new ArrayBuffer(0),
-        openRouterApiKey: 'key-123',
-        modelId: 'openai/whisper-large-v3',
+        groqApiKey: 'key-123',
+        modelId: 'whisper-large-v3-turbo',
         fetchImplementation,
       }),
     ).rejects.toThrow();

@@ -34,7 +34,7 @@ import {
   parseGithubRepositoryReference,
   redactSecretsFromText,
 } from '@/github/repository';
-import { chatWithOpenRouter } from '@/voice/llm';
+import { chatWithLlm } from '@/voice/llm';
 
 export type ApolloCodingParams = {
   readonly repository: string;
@@ -113,19 +113,20 @@ export class ApolloCoding extends WorkflowEntrypoint<Env, ApolloCodingParams> {
               proxyOrigin,
               proxyToken: await mintCodingProxyToken({
                 instanceId: event.instanceId,
-                openRouterApiKey: this.env.OPENROUTER_API_KEY,
+                apiKey: this.env.LLM_API_KEY ?? '',
                 nowMilliseconds: Date.now(),
               }),
-              modelId: this.env.OPENROUTER_CODING_MODEL,
+              modelId: this.env.LLM_MODEL ?? 'deepseek-chat',
               taskText: event.payload.task,
             });
           }
           return runCodingAgent({
             sandbox: buildAgentSandboxPort(sandbox),
             callLlm: async ({ messageList, toolDefinitionList }) =>
-              chatWithOpenRouter({
-                openRouterApiKey: this.env.OPENROUTER_API_KEY,
-                modelId: this.env.OPENROUTER_CODING_MODEL,
+              chatWithLlm({
+                apiKey: this.env.LLM_API_KEY ?? '',
+                baseUrl: this.env.LLM_BASE_URL ?? 'https://api.deepseek.com',
+                modelId: this.env.LLM_MODEL ?? 'deepseek-chat',
                 messageList,
                 toolDefinitionList,
               }),

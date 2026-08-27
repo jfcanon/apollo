@@ -22,12 +22,7 @@
     "AURA_SPEAKER": "draco",
     "BRAIN_URL": "https://brain.ygdcbtmc4u.uk",
     "WORKERSAI_TTS_MODEL": "@cf/deepgram/aura-2-en",
-    "OPENROUTER_MODEL": "deepseek/deepseek-v4-flash-0731",
-    "OPENROUTER_STT_MODEL": "openai/whisper-large-v3",
-    "OPENROUTER_RESEARCH_MODEL": "perplexity/sonar-deep-research",
-    "OPENROUTER_CODING_MODEL": "moonshotai/kimi-k3",
     "ELEVENLABS_TTS_MODEL": "eleven_multilingual_v2",
-    "OPENROUTER_EMBEDDING_MODEL": "openai/text-embedding-3-small",
     "APOLLO_OWNER_EMAIL": "nahuelavalos@gmail.com",
   },
   "durable_objects": {

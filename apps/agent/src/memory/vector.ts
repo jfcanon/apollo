@@ -16,15 +16,16 @@ export type MemoryVectorMatch = {
   readonly score: number;
 };
 
-export async function embedTextWithOpenRouter(input: {
-  readonly openRouterApiKey: string;
+export async function embedTextWithLlm(input: {
+  readonly apiKey: string;
+  readonly baseUrl: string;
   readonly modelId: string;
   readonly text: string;
 }): Promise<number[]> {
-  const response = await fetch('https://openrouter.ai/api/v1/embeddings', {
+  const response = await fetch(`${input.baseUrl}/embeddings`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${input.openRouterApiKey}`,
+      Authorization: `Bearer ${input.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -81,7 +82,8 @@ export async function queryMemoryVectors(input: {
 
 export async function recallSemanticMemoryContent(input: {
   readonly vectorizeIndex: VectorizeIndex | undefined;
-  readonly openRouterApiKey: string;
+  readonly embeddingBaseUrl: string;
+  readonly embeddingApiKey: string;
   readonly embeddingModelId: string;
   readonly queryText: string;
   readonly deviceId: string;
@@ -92,8 +94,9 @@ export async function recallSemanticMemoryContent(input: {
   }
 
   try {
-    const values = await embedTextWithOpenRouter({
-      openRouterApiKey: input.openRouterApiKey,
+    const values = await embedTextWithLlm({
+      apiKey: input.embeddingApiKey,
+      baseUrl: input.embeddingBaseUrl,
       modelId: input.embeddingModelId,
       text: input.queryText,
     });

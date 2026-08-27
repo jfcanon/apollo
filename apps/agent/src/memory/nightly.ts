@@ -22,7 +22,7 @@ import {
   type MemorySqlExecutor,
 } from '@/memory/store';
 import { enqueueMemoryIndexJob } from '@/queues/consume';
-import { chatWithOpenRouter } from '@/voice/llm';
+import { chatWithLlm } from '@/voice/llm';
 
 export const OWNER_MEMORY_STATE_PREFERENCE_KEY = 'ownerMemoryState';
 export const OWNER_MEMORY_INDEX_INTENT_PREFERENCE_KEY = 'ownerMemoryIndexIntents';
@@ -152,16 +152,18 @@ export async function runOwnerMemoryConsolidation(
     existingFactList: seededFactList,
     nowIso: new Date(nowMilliseconds).toISOString(),
   });
-  const firstChatResult = await chatWithOpenRouter({
-    openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-    modelId: dependencies.environment.OPENROUTER_MODEL,
+  const firstChatResult = await chatWithLlm({
+    apiKey: dependencies.environment.LLM_API_KEY ?? '',
+    baseUrl: dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+    modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
     messageList: extractionMessageList,
   });
   let extraction = parseMemoryExtractionResult(firstChatResult.text);
   if (extraction === undefined) {
-    const retryChatResult = await chatWithOpenRouter({
-      openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-      modelId: dependencies.environment.OPENROUTER_MODEL,
+    const retryChatResult = await chatWithLlm({
+      apiKey: dependencies.environment.LLM_API_KEY ?? '',
+      baseUrl: dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+      modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
       messageList: buildExtractionRetryMessageList(
         extractionMessageList,
         firstChatResult.text,
