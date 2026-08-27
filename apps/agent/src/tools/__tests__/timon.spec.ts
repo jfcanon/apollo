@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test';
 
 import { createFakeApolloEnvironment } from '@/configuration/testing';
 import { timonCreateTaskTool } from '@/tools/timon';
-import type { Env } from '@/configuration/environment';
 
 function withMockedFetch(handler: (requestUrl: string, init?: RequestInit) => Response): {
   restore: () => void;
@@ -99,7 +98,9 @@ describe('timonCreateTaskTool', () => {
 
       expect(result.ok).toBe(true);
       expect(result.summary).toBe('Guardado: Tarea simple');
-      expect(result.data?.due_date).toBeNull();
+      expect(
+        (result.data as { due_date: string | null } | undefined)?.due_date,
+      ).toBeNull();
     } finally {
       mocked.restore();
     }
@@ -233,7 +234,9 @@ describe('timonCreateTaskTool', () => {
   });
 
   it('buildConfirmSummary returns expected format', () => {
-    const summary = timonCreateTaskTool.buildConfirmSummary({
+    const buildConfirmSummary = timonCreateTaskTool.buildConfirmSummary;
+    expect(buildConfirmSummary).toBeDefined();
+    const summary = buildConfirmSummary!({
       title: 'Test task',
       remind_at: '2026-08-28T10:00:00-03:00',
     });
@@ -243,7 +246,9 @@ describe('timonCreateTaskTool', () => {
   });
 
   it('buildConfirmSummary omits when no remind_at', () => {
-    const summary = timonCreateTaskTool.buildConfirmSummary({ title: 'Simple task' });
+    const buildConfirmSummary = timonCreateTaskTool.buildConfirmSummary;
+    expect(buildConfirmSummary).toBeDefined();
+    const summary = buildConfirmSummary!({ title: 'Simple task' });
     expect(summary).toBe('Crear tarea en Timon: "Simple task"');
   });
 });
