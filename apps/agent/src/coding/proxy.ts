@@ -101,7 +101,7 @@ export async function handleCodingLlmProxyRequest(
   const presentedToken = authorizationHeader.replace(/^Bearer\s+/i, '');
   const isTokenValid = await verifyCodingProxyToken({
     token: presentedToken,
-    openRouterApiKey: environment.OPENROUTER_API_KEY,
+    openRouterApiKey: environment.OPENROUTER_API_KEY ?? '',
     nowMilliseconds: Date.now(),
   });
   if (!isTokenValid) {

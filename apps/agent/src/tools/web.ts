@@ -35,8 +35,8 @@ export const webSearchTool: ToolDefinition = {
         };
       }
       const answerText = await synthesizeQuickWebAnswer({
-        openRouterApiKey: context.environment.OPENROUTER_API_KEY,
-        modelId: context.environment.OPENROUTER_MODEL,
+        openRouterApiKey: context.environment.OPENROUTER_API_KEY ?? '',
+        modelId: context.environment.OPENROUTER_MODEL ?? '',
         query: parsedArgs.query,
         currentDateText: formatCurrentDateTimeForPrompt(context.nowMilliseconds),
         sourceList,

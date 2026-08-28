@@ -58,8 +58,8 @@ export const recallMemoryTool: ToolDefinition = {
       const { embedTextWithOpenRouter, queryMemoryVectors } =
         await import('@/memory/vector');
       const values = await embedTextWithOpenRouter({
-        openRouterApiKey: context.environment.OPENROUTER_API_KEY,
-        modelId: context.environment.OPENROUTER_EMBEDDING_MODEL,
+        openRouterApiKey: context.environment.OPENROUTER_API_KEY ?? '',
+        modelId: context.environment.OPENROUTER_EMBEDDING_MODEL ?? '',
         text: parsedArgs.query,
       });
       const matchList = await queryMemoryVectors({

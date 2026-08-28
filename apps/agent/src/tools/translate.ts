@@ -32,8 +32,8 @@ export const translateTool: ToolDefinition = {
 
     try {
       const chatResult = await chatWithOpenRouter({
-        openRouterApiKey: context.environment.OPENROUTER_API_KEY,
-        modelId: context.environment.OPENROUTER_MODEL,
+        openRouterApiKey: context.environment.OPENROUTER_API_KEY ?? '',
+        modelId: context.environment.OPENROUTER_MODEL ?? '',
         messageList: [
           {
             role: 'system',

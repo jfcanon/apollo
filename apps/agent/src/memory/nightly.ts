@@ -153,15 +153,15 @@ export async function runOwnerMemoryConsolidation(
     nowIso: new Date(nowMilliseconds).toISOString(),
   });
   const firstChatResult = await chatWithOpenRouter({
-    openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-    modelId: dependencies.environment.OPENROUTER_MODEL,
+    openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY ?? '',
+    modelId: dependencies.environment.OPENROUTER_MODEL ?? '',
     messageList: extractionMessageList,
   });
   let extraction = parseMemoryExtractionResult(firstChatResult.text);
   if (extraction === undefined) {
     const retryChatResult = await chatWithOpenRouter({
-      openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-      modelId: dependencies.environment.OPENROUTER_MODEL,
+      openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY ?? '',
+      modelId: dependencies.environment.OPENROUTER_MODEL ?? '',
       messageList: buildExtractionRetryMessageList(
         extractionMessageList,
         firstChatResult.text,

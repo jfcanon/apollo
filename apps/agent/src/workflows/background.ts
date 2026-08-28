@@ -28,8 +28,8 @@ export class ApolloBackground extends WorkflowEntrypoint<Env, ApolloBackgroundPa
       { retries: { limit: 2, delay: '30 seconds', backoff: 'exponential' } },
       async () =>
         runDeepResearchWithPerplexity({
-          openRouterApiKey: this.env.OPENROUTER_API_KEY,
-          modelId: this.env.OPENROUTER_RESEARCH_MODEL,
+          openRouterApiKey: this.env.OPENROUTER_API_KEY ?? '',
+          modelId: this.env.OPENROUTER_RESEARCH_MODEL ?? '',
           prompt: event.payload.prompt,
           nowMilliseconds: Date.now(),
         }),
@@ -93,8 +93,8 @@ export class ApolloBackground extends WorkflowEntrypoint<Env, ApolloBackgroundPa
       { retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' } },
       async () =>
         synthesizeResearchSpokenSummary({
-          openRouterApiKey: this.env.OPENROUTER_API_KEY,
-          modelId: this.env.OPENROUTER_MODEL,
+          openRouterApiKey: this.env.OPENROUTER_API_KEY ?? '',
+          modelId: this.env.OPENROUTER_MODEL ?? '',
           prompt: event.payload.prompt,
           reportMarkdown,
         }),

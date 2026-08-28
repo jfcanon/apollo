@@ -27,7 +27,7 @@ import { TTS_PCM_CHANNEL_COUNT, TTS_PCM_SAMPLE_RATE_HZ } from '@/voice/elevenlab
 import { chatWithOpenRouter } from '@/voice/llm';
 import { transcribeAudioWithOpenRouter } from '@/voice/stt';
 import { synthesizeSpeechWithGemini } from '@/voice/gemini';
-import { synthesizeSpeechWithGroq, transcribeAudioWithGroq } from '@/voice/groq';
+import { transcribeAudioWithLocal } from '@/voice/local';
 import {
   synthesizeSpeechWithWorkersAi,
   transcribeAudioWithWorkersAi,
@@ -93,8 +93,8 @@ export async function executeApolloTurn(
   ): Promise<readonly string[]> =>
     recallSemanticMemoryContent({
       vectorizeIndex: dependencies.environment.VECTORIZE,
-      openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-      embeddingModelId: dependencies.environment.OPENROUTER_EMBEDDING_MODEL,
+      openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY ?? '',
+      embeddingModelId: dependencies.environment.OPENROUTER_EMBEDDING_MODEL ?? '',
       queryText,
       deviceId: dependencies.deviceId,
     });
@@ -137,80 +137,50 @@ export async function executeApolloTurn(
         },
         tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
       }
-    : dependencies.environment.VOICE_PROVIDER === 'groq' ||
-        dependencies.environment.VOICE_PROVIDER === 'free'
+    : dependencies.environment.VOICE_PROVIDER === 'local'
       ? {
-          // Groq serves STT and TTS over plain HTTPS, so this path spends no
-          // Workers AI neurons at all — the daily free allowance that kept
-          // taking the whole voice loop down with it.
+          // Local provider: Whisper STT + local qwen LLM + Gemini TTS.
+          // All inference runs on-premise, zero cloud API costs.
           stt: async (audioBuffer) =>
-            transcribeAudioWithGroq({
-              groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
+            transcribeAudioWithLocal({
+              localSttUrl:
+                dependencies.environment.LOCAL_STT_URL ?? 'https://stt.ygdcbtmc4u.uk',
               audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
-              ...(dependencies.environment.GROQ_STT_MODEL !== undefined
-                ? { modelId: dependencies.environment.GROQ_STT_MODEL }
-                : {}),
               ...(dependencies.environment.STT_LANGUAGE !== undefined
                 ? { languageCode: dependencies.environment.STT_LANGUAGE }
                 : {}),
             }),
           llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
             chatWithOpenRouter({
-              openRouterApiKey:
-                dependencies.environment.LLM_API_KEY ??
-                dependencies.environment.OPENROUTER_API_KEY,
+              openRouterApiKey: dependencies.environment.LLM_API_KEY ?? '',
               modelId:
-                dependencies.environment.LLM_MODEL ??
-                dependencies.environment.OPENROUTER_MODEL,
-              ...(dependencies.environment.LLM_BASE_URL !== undefined
-                ? { baseUrl: dependencies.environment.LLM_BASE_URL }
-                : {}),
+                dependencies.environment.LOCAL_LLM_MODEL ??
+                'mlx-community/Qwen3.8-27B-4bit',
+              baseUrl:
+                dependencies.environment.LOCAL_LLM_URL ?? 'http://127.0.0.1:8080/v1',
               ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
               messageList,
               toolDefinitionList,
               ...(onTextDelta !== undefined ? { onTextDelta } : {}),
             }),
-          // Same R2 cache as every other provider: a repeated sentence is
-          // served from storage instead of re-synthesised.
-          // 'free' speaks through Gemini, which already emits the device's exact
-          // contract (audio/L16;codec=pcm;rate=24000) and needs no model-terms
-          // acceptance. 'groq' uses Orpheus, which does require it.
           tts: async (text) =>
-            dependencies.environment.VOICE_PROVIDER === 'free'
-              ? synthesizeSpeechThroughCache({
-                  mediaBucket: dependencies.environment.MEDIA,
+            synthesizeSpeechThroughCache({
+              mediaBucket: dependencies.environment.MEDIA,
+              text,
+              voiceId: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+              modelId:
+                dependencies.environment.GEMINI_TTS_MODEL ??
+                'gemini-2.5-flash-preview-tts',
+              synthesize: () =>
+                synthesizeSpeechWithGemini({
+                  geminiApiKey: dependencies.environment.GEMINI_API_KEY ?? '',
                   text,
-                  voiceId: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
-                  modelId:
-                    dependencies.environment.GEMINI_TTS_MODEL ??
-                    'gemini-2.5-flash-preview-tts',
-                  synthesize: () =>
-                    synthesizeSpeechWithGemini({
-                      geminiApiKey: dependencies.environment.GEMINI_API_KEY ?? '',
-                      text,
-                      voiceName: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
-                      ...(dependencies.environment.GEMINI_TTS_MODEL !== undefined
-                        ? { modelId: dependencies.environment.GEMINI_TTS_MODEL }
-                        : {}),
-                    }),
-                })
-              : synthesizeSpeechThroughCache({
-                  mediaBucket: dependencies.environment.MEDIA,
-                  text,
-                  voiceId: dependencies.environment.GROQ_TTS_VOICE ?? 'austin',
-                  modelId:
-                    dependencies.environment.GROQ_TTS_MODEL ??
-                    'canopylabs/orpheus-v1-english',
-                  synthesize: () =>
-                    synthesizeSpeechWithGroq({
-                      groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
-                      text,
-                      voice: dependencies.environment.GROQ_TTS_VOICE ?? 'austin',
-                      ...(dependencies.environment.GROQ_TTS_MODEL !== undefined
-                        ? { modelId: dependencies.environment.GROQ_TTS_MODEL }
-                        : {}),
-                    }),
+                  voiceName: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+                  ...(dependencies.environment.GEMINI_TTS_MODEL !== undefined
+                    ? { modelId: dependencies.environment.GEMINI_TTS_MODEL }
+                    : {}),
                 }),
+            }),
         }
       : dependencies.environment.VOICE_PROVIDER === 'workersai'
         ? {
@@ -226,10 +196,12 @@ export async function executeApolloTurn(
               chatWithOpenRouter({
                 openRouterApiKey:
                   dependencies.environment.LLM_API_KEY ??
-                  dependencies.environment.OPENROUTER_API_KEY,
+                  dependencies.environment.OPENROUTER_API_KEY ??
+                  '',
                 modelId:
                   dependencies.environment.LLM_MODEL ??
-                  dependencies.environment.OPENROUTER_MODEL,
+                  dependencies.environment.OPENROUTER_MODEL ??
+                  '',
                 ...(dependencies.environment.LLM_BASE_URL !== undefined
                   ? { baseUrl: dependencies.environment.LLM_BASE_URL }
                   : {}),
@@ -263,13 +235,13 @@ export async function executeApolloTurn(
             stt: async (audioBuffer) =>
               transcribeAudioWithOpenRouter({
                 audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
-                openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-                modelId: dependencies.environment.OPENROUTER_STT_MODEL,
+                openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY ?? '',
+                modelId: dependencies.environment.OPENROUTER_STT_MODEL ?? '',
               }),
             llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
               chatWithOpenRouter({
-                openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY,
-                modelId: dependencies.environment.OPENROUTER_MODEL,
+                openRouterApiKey: dependencies.environment.OPENROUTER_API_KEY ?? '',
+                modelId: dependencies.environment.OPENROUTER_MODEL ?? '',
                 messageList,
                 toolDefinitionList,
                 ...(onTextDelta !== undefined ? { onTextDelta } : {}),

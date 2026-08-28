@@ -11,8 +11,8 @@ export async function consumeApolloQueueBatch(
 
       if (job.type === 'index_memory') {
         const values = await embedTextWithOpenRouter({
-          openRouterApiKey: environment.OPENROUTER_API_KEY,
-          modelId: environment.OPENROUTER_EMBEDDING_MODEL,
+          openRouterApiKey: environment.OPENROUTER_API_KEY ?? '',
+          modelId: environment.OPENROUTER_EMBEDDING_MODEL ?? '',
           text: job.content,
         });
         await upsertMemoryVector({

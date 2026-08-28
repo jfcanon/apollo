@@ -113,10 +113,10 @@ export class ApolloCoding extends WorkflowEntrypoint<Env, ApolloCodingParams> {
               proxyOrigin,
               proxyToken: await mintCodingProxyToken({
                 instanceId: event.instanceId,
-                openRouterApiKey: this.env.OPENROUTER_API_KEY,
+                openRouterApiKey: this.env.OPENROUTER_API_KEY ?? '',
                 nowMilliseconds: Date.now(),
               }),
-              modelId: this.env.OPENROUTER_CODING_MODEL,
+              modelId: this.env.OPENROUTER_CODING_MODEL ?? '',
               taskText: event.payload.task,
             });
           }
@@ -124,8 +124,8 @@ export class ApolloCoding extends WorkflowEntrypoint<Env, ApolloCodingParams> {
             sandbox: buildAgentSandboxPort(sandbox),
             callLlm: async ({ messageList, toolDefinitionList }) =>
               chatWithOpenRouter({
-                openRouterApiKey: this.env.OPENROUTER_API_KEY,
-                modelId: this.env.OPENROUTER_CODING_MODEL,
+                openRouterApiKey: this.env.OPENROUTER_API_KEY ?? '',
+                modelId: this.env.OPENROUTER_CODING_MODEL ?? '',
                 messageList,
                 toolDefinitionList,
               }),
