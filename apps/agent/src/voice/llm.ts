@@ -48,6 +48,7 @@ const openRouterChatResponseSchema = z.object({
                 }),
               }),
             )
+            .nullable()
             .optional(),
         }),
       }),
@@ -110,6 +111,7 @@ const openRouterStreamChunkSchema = z.object({
                     .optional(),
                 }),
               )
+              .nullable()
               .optional(),
           })
           .optional(),

@@ -253,3 +253,48 @@ describe('chatWithLlm', () => {
     ).rejects.toThrow();
   });
 });
+
+const fetchForBody = (body: string) =>
+  Object.assign(async () => new Response(body, { status: 200 }), {
+    preconnect: () => {},
+  }) as typeof fetch;
+
+describe('chatWithLlm with OpenAI-compatible servers that emit null fields', () => {
+  // mlx_vlm.server (local Qwen) sends "tool_calls": null on every delta and on
+  // the final message; a schema that only allows undefined rejects every turn.
+  it('accepts null tool_calls in streamed deltas', async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"role":"assistant","content":"Hello","tool_calls":null}}]}',
+      'data: {"choices":[{"delta":{"content":" friend","tool_calls":null}}]}',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    const result = await chatWithLlm({
+      apiKey: '',
+      baseUrl: 'https://llm.example/v1',
+      modelId: 'mlx-community/Qwen3.8-27B-4bit',
+      messageList: [{ role: 'user', content: 'hi' }],
+      onTextDelta: () => {},
+      fetchImplementation: fetchForBody(sseBody),
+    });
+    expect(result.text).toBe('Hello friend');
+    expect(result.toolCallList).toEqual([]);
+  });
+
+  it('accepts null tool_calls in a non-streamed message', async () => {
+    const body = JSON.stringify({
+      choices: [
+        { message: { role: 'assistant', content: 'Hello friend', tool_calls: null } },
+      ],
+    });
+    const result = await chatWithLlm({
+      apiKey: '',
+      baseUrl: 'https://llm.example/v1',
+      modelId: 'mlx-community/Qwen3.8-27B-4bit',
+      messageList: [{ role: 'user', content: 'hi' }],
+      fetchImplementation: fetchForBody(body),
+    });
+    expect(result.text).toBe('Hello friend');
+    expect(result.toolCallList).toEqual([]);
+  });
+});
