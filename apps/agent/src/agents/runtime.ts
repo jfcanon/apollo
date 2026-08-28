@@ -26,6 +26,7 @@ import { runDeskTurn, type VoiceAdapters } from '@/turn/run';
 import { TTS_PCM_CHANNEL_COUNT, TTS_PCM_SAMPLE_RATE_HZ } from '@/voice/elevenlabs';
 import { chatWithLlm } from '@/voice/llm';
 import { synthesizeSpeechWithGemini } from '@/voice/gemini';
+import { transcribeAudioWithLocal } from '@/voice/local';
 import { synthesizeSpeechWithGroq, transcribeAudioWithGroq } from '@/voice/groq';
 import {
   synthesizeSpeechWithWorkersAi,
@@ -137,19 +138,19 @@ export async function executeApolloTurn(
         },
         tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
       }
-    : dependencies.environment.VOICE_PROVIDER === 'groq' ||
-        dependencies.environment.VOICE_PROVIDER === 'free'
+    : dependencies.environment.VOICE_PROVIDER === 'local'
       ? {
-          // Groq serves STT and TTS over plain HTTPS, so this path spends no
-          // Workers AI neurons at all — the daily free allowance that kept
-          // taking the whole voice loop down with it.
+          // Local provider (NID-470): self-hosted Whisper STT + local Qwen LLM,
+          // both reached through Cloudflare tunnels, so the voice loop spends
+          // nothing on Groq/DeepSeek. TTS stays on Gemini until a $0 local TTS
+          // path exists. LOCAL_LLM_MODEL is separate from LLM_MODEL on purpose:
+          // the mlx server treats the model field as a HuggingFace repo id and
+          // returns 400 for a foreign name like "deepseek-chat".
           stt: async (audioBuffer) =>
-            transcribeAudioWithGroq({
-              groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
+            transcribeAudioWithLocal({
+              localSttUrl:
+                dependencies.environment.LOCAL_STT_URL ?? 'https://stt.ygdcbtmc4u.uk',
               audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
-              ...(dependencies.environment.GROQ_STT_MODEL !== undefined
-                ? { modelId: dependencies.environment.GROQ_STT_MODEL }
-                : {}),
               ...(dependencies.environment.STT_LANGUAGE !== undefined
                 ? { languageCode: dependencies.environment.STT_LANGUAGE }
                 : {}),
@@ -157,99 +158,41 @@ export async function executeApolloTurn(
           llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
             chatWithLlm({
               apiKey: dependencies.environment.LLM_API_KEY ?? '',
-              modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
+              modelId:
+                dependencies.environment.LOCAL_LLM_MODEL ??
+                'mlx-community/Qwen3.8-27B-4bit',
               baseUrl:
-                dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+                dependencies.environment.LOCAL_LLM_URL ?? 'https://llm.ygdcbtmc4u.uk/v1',
               ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
               messageList,
               toolDefinitionList,
               ...(onTextDelta !== undefined ? { onTextDelta } : {}),
             }),
-          // Same R2 cache as every other provider: a repeated sentence is
-          // served from storage instead of re-synthesised.
-          // 'free' speaks through Gemini, which already emits the device's exact
-          // contract (audio/L16;codec=pcm;rate=24000) and needs no model-terms
-          // acceptance. 'groq' uses Orpheus, which does require it.
           tts: async (text) =>
-            dependencies.environment.VOICE_PROVIDER === 'free'
-              ? synthesizeSpeechThroughCache({
-                  mediaBucket: dependencies.environment.MEDIA,
+            synthesizeSpeechThroughCache({
+              mediaBucket: dependencies.environment.MEDIA,
+              text,
+              voiceId: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+              modelId:
+                dependencies.environment.GEMINI_TTS_MODEL ??
+                'gemini-2.5-flash-preview-tts',
+              synthesize: () =>
+                synthesizeSpeechWithGemini({
+                  geminiApiKey: dependencies.environment.GEMINI_API_KEY ?? '',
                   text,
-                  voiceId: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
-                  modelId:
-                    dependencies.environment.GEMINI_TTS_MODEL ??
-                    'gemini-2.5-flash-preview-tts',
-                  synthesize: () =>
-                    synthesizeSpeechWithGemini({
-                      geminiApiKey: dependencies.environment.GEMINI_API_KEY ?? '',
-                      text,
-                      voiceName: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
-                      ...(dependencies.environment.GEMINI_TTS_MODEL !== undefined
-                        ? { modelId: dependencies.environment.GEMINI_TTS_MODEL }
-                        : {}),
-                    }),
-                })
-              : synthesizeSpeechThroughCache({
-                  mediaBucket: dependencies.environment.MEDIA,
-                  text,
-                  voiceId: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
-                  modelId:
-                    dependencies.environment.GROQ_TTS_MODEL ??
-                    'canopylabs/orpheus-v1-english',
-                  synthesize: () =>
-                    synthesizeSpeechWithGroq({
-                      groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
-                      text,
-                      voice: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
-                      ...(dependencies.environment.GROQ_TTS_MODEL !== undefined
-                        ? { modelId: dependencies.environment.GROQ_TTS_MODEL }
-                        : {}),
-                    }),
+                  voiceName: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+                  ...(dependencies.environment.GEMINI_TTS_MODEL !== undefined
+                    ? { modelId: dependencies.environment.GEMINI_TTS_MODEL }
+                    : {}),
                 }),
+            }),
         }
-      : dependencies.environment.VOICE_PROVIDER === 'workersai'
+      : dependencies.environment.VOICE_PROVIDER === 'groq' ||
+          dependencies.environment.VOICE_PROVIDER === 'free'
         ? {
-            stt: async (audioBuffer) =>
-              transcribeAudioWithWorkersAi({
-                ai: dependencies.environment.AI,
-                audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
-                ...(dependencies.environment.STT_LANGUAGE !== undefined
-                  ? { languageCode: dependencies.environment.STT_LANGUAGE }
-                  : {}),
-              }),
-            llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
-              chatWithLlm({
-                apiKey: dependencies.environment.LLM_API_KEY ?? '',
-                modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
-                baseUrl:
-                  dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
-                ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
-                messageList,
-                toolDefinitionList,
-                ...(onTextDelta !== undefined ? { onTextDelta } : {}),
-              }),
-            // Same R2 cache as the ElevenLabs path: repeated utterances cost zero
-            // neurons. voiceId maps to an Aura speaker instead of an ElevenLabs id.
-            tts: async (text) =>
-              synthesizeSpeechThroughCache({
-                mediaBucket: dependencies.environment.MEDIA,
-                text,
-                voiceId: dependencies.environment.AURA_SPEAKER ?? 'draco',
-                modelId:
-                  dependencies.environment.WORKERSAI_TTS_MODEL ??
-                  '@cf/deepgram/aura-2-en',
-                synthesize: () =>
-                  synthesizeSpeechWithWorkersAi({
-                    ai: dependencies.environment.AI,
-                    text,
-                    speaker: dependencies.environment.AURA_SPEAKER ?? 'draco',
-                    ...(dependencies.environment.WORKERSAI_TTS_MODEL !== undefined
-                      ? { modelId: dependencies.environment.WORKERSAI_TTS_MODEL }
-                      : {}),
-                  }),
-              }),
-          }
-        : {
+            // Groq serves STT and TTS over plain HTTPS, so this path spends no
+            // Workers AI neurons at all — the daily free allowance that kept
+            // taking the whole voice loop down with it.
             stt: async (audioBuffer) =>
               transcribeAudioWithGroq({
                 groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
@@ -267,17 +210,124 @@ export async function executeApolloTurn(
                 modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
                 baseUrl:
                   dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+                ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
                 messageList,
                 toolDefinitionList,
                 ...(onTextDelta !== undefined ? { onTextDelta } : {}),
               }),
-            tts: async (text, voiceId) =>
-              synthesizeApolloSpeech({
-                environment: dependencies.environment,
-                text,
-                voiceId,
-              }),
-          };
+            // Same R2 cache as every other provider: a repeated sentence is
+            // served from storage instead of re-synthesised.
+            // 'free' speaks through Gemini, which already emits the device's exact
+            // contract (audio/L16;codec=pcm;rate=24000) and needs no model-terms
+            // acceptance. 'groq' uses Orpheus, which does require it.
+            tts: async (text) =>
+              dependencies.environment.VOICE_PROVIDER === 'free'
+                ? synthesizeSpeechThroughCache({
+                    mediaBucket: dependencies.environment.MEDIA,
+                    text,
+                    voiceId: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+                    modelId:
+                      dependencies.environment.GEMINI_TTS_MODEL ??
+                      'gemini-2.5-flash-preview-tts',
+                    synthesize: () =>
+                      synthesizeSpeechWithGemini({
+                        geminiApiKey: dependencies.environment.GEMINI_API_KEY ?? '',
+                        text,
+                        voiceName: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+                        ...(dependencies.environment.GEMINI_TTS_MODEL !== undefined
+                          ? { modelId: dependencies.environment.GEMINI_TTS_MODEL }
+                          : {}),
+                      }),
+                  })
+                : synthesizeSpeechThroughCache({
+                    mediaBucket: dependencies.environment.MEDIA,
+                    text,
+                    voiceId: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
+                    modelId:
+                      dependencies.environment.GROQ_TTS_MODEL ??
+                      'canopylabs/orpheus-v1-english',
+                    synthesize: () =>
+                      synthesizeSpeechWithGroq({
+                        groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
+                        text,
+                        voice: dependencies.environment.GROQ_TTS_VOICE ?? 'tara',
+                        ...(dependencies.environment.GROQ_TTS_MODEL !== undefined
+                          ? { modelId: dependencies.environment.GROQ_TTS_MODEL }
+                          : {}),
+                      }),
+                  }),
+          }
+        : dependencies.environment.VOICE_PROVIDER === 'workersai'
+          ? {
+              stt: async (audioBuffer) =>
+                transcribeAudioWithWorkersAi({
+                  ai: dependencies.environment.AI,
+                  audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
+                  ...(dependencies.environment.STT_LANGUAGE !== undefined
+                    ? { languageCode: dependencies.environment.STT_LANGUAGE }
+                    : {}),
+                }),
+              llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
+                chatWithLlm({
+                  apiKey: dependencies.environment.LLM_API_KEY ?? '',
+                  modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
+                  baseUrl:
+                    dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+                  ...(llmExtraBody !== undefined ? { extraBody: llmExtraBody } : {}),
+                  messageList,
+                  toolDefinitionList,
+                  ...(onTextDelta !== undefined ? { onTextDelta } : {}),
+                }),
+              // Same R2 cache as the ElevenLabs path: repeated utterances cost zero
+              // neurons. voiceId maps to an Aura speaker instead of an ElevenLabs id.
+              tts: async (text) =>
+                synthesizeSpeechThroughCache({
+                  mediaBucket: dependencies.environment.MEDIA,
+                  text,
+                  voiceId: dependencies.environment.AURA_SPEAKER ?? 'draco',
+                  modelId:
+                    dependencies.environment.WORKERSAI_TTS_MODEL ??
+                    '@cf/deepgram/aura-2-en',
+                  synthesize: () =>
+                    synthesizeSpeechWithWorkersAi({
+                      ai: dependencies.environment.AI,
+                      text,
+                      speaker: dependencies.environment.AURA_SPEAKER ?? 'draco',
+                      ...(dependencies.environment.WORKERSAI_TTS_MODEL !== undefined
+                        ? { modelId: dependencies.environment.WORKERSAI_TTS_MODEL }
+                        : {}),
+                    }),
+                }),
+            }
+          : {
+              stt: async (audioBuffer) =>
+                transcribeAudioWithGroq({
+                  groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
+                  audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
+                  ...(dependencies.environment.GROQ_STT_MODEL !== undefined
+                    ? { modelId: dependencies.environment.GROQ_STT_MODEL }
+                    : {}),
+                  ...(dependencies.environment.STT_LANGUAGE !== undefined
+                    ? { languageCode: dependencies.environment.STT_LANGUAGE }
+                    : {}),
+                }),
+              llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
+                chatWithLlm({
+                  apiKey: dependencies.environment.LLM_API_KEY ?? '',
+                  modelId: dependencies.environment.LLM_MODEL ?? 'deepseek-chat',
+                  baseUrl:
+                    dependencies.environment.LLM_BASE_URL ?? 'https://api.deepseek.com',
+                  messageList,
+                  toolDefinitionList,
+                  ...(onTextDelta !== undefined ? { onTextDelta } : {}),
+                }),
+              tts: async (text, voiceId) =>
+                synthesizeApolloSpeech({
+                  environment: dependencies.environment,
+                  text,
+                  voiceId,
+                }),
+            };
 
   const turnOutput = await runDeskTurn({
     text: turnPart.text,

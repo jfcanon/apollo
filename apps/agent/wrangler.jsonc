@@ -15,13 +15,16 @@
     // "groq" = Groq STT (whisper-large-v3-turbo) + Groq TTS (playai-tts / orpheus)
     // + the LLM configured below. Spends ZERO Workers AI neurons. Free tier, no hard quota.
     // "free" used Gemini TTS which hit 429 quota — switched to groq for production.
-    "VOICE_PROVIDER": "groq",
+    "VOICE_PROVIDER": "local",
     "LLM_BASE_URL": "https://api.deepseek.com",
     "LLM_MODEL": "deepseek-chat",
     "STT_LANGUAGE": "en",
     // Tunnel URL for the local Whisper STT server (NID-515). Only used when
     // VOICE_PROVIDER selects the local provider.
     "LOCAL_STT_URL": "https://stt.ygdcbtmc4u.uk",
+    // Local Qwen LLM via tunnel (NID-470). LOCAL_LLM_MODEL must be the mlx repo id.
+    "LOCAL_LLM_URL": "https://llm.ygdcbtmc4u.uk/v1",
+    "LOCAL_LLM_MODEL": "mlx-community/Qwen3.8-27B-4bit",
     "AURA_SPEAKER": "draco",
     "BRAIN_URL": "https://brain.ygdcbtmc4u.uk",
     "WORKERSAI_TTS_MODEL": "@cf/deepgram/aura-2-en",
