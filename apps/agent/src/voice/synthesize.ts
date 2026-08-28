@@ -2,7 +2,10 @@ import { synthesizeSpeechWithElevenLabs } from '@/voice/elevenlabs';
 import { synthesizeSpeechWithGemini } from '@/voice/gemini';
 import { synthesizeSpeechWithGroq } from '@/voice/groq';
 import { synthesizeSpeechThroughCache } from '@/voice/ttscache';
-import { synthesizeSpeechWithWorkersAi } from '@/voice/workersai';
+import {
+  requireWorkersAiBinding,
+  synthesizeSpeechWithWorkersAi,
+} from '@/voice/workersai';
 
 // The one production speech path: every caller gets the R2 cache, so a repeated
 // utterance is never synthesised twice.
@@ -66,7 +69,7 @@ export async function synthesizeApolloSpeech(input: {
       modelId,
       synthesize: () =>
         synthesizeSpeechWithWorkersAi({
-          ai: environment.AI,
+          ai: requireWorkersAiBinding(environment),
           text,
           speaker,
           modelId,

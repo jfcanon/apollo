@@ -29,6 +29,7 @@ import { transcribeAudioWithOpenRouter } from '@/voice/stt';
 import { synthesizeSpeechWithGemini } from '@/voice/gemini';
 import { transcribeAudioWithLocal } from '@/voice/local';
 import {
+  requireWorkersAiBinding,
   synthesizeSpeechWithWorkersAi,
   transcribeAudioWithWorkersAi,
 } from '@/voice/workersai';
@@ -186,7 +187,7 @@ export async function executeApolloTurn(
         ? {
             stt: async (audioBuffer) =>
               transcribeAudioWithWorkersAi({
-                ai: dependencies.environment.AI,
+                ai: requireWorkersAiBinding(dependencies.environment),
                 audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
                 ...(dependencies.environment.STT_LANGUAGE !== undefined
                   ? { languageCode: dependencies.environment.STT_LANGUAGE }
@@ -222,7 +223,7 @@ export async function executeApolloTurn(
                   '@cf/deepgram/aura-2-en',
                 synthesize: () =>
                   synthesizeSpeechWithWorkersAi({
-                    ai: dependencies.environment.AI,
+                    ai: requireWorkersAiBinding(dependencies.environment),
                     text,
                     speaker: dependencies.environment.AURA_SPEAKER ?? 'draco',
                     ...(dependencies.environment.WORKERSAI_TTS_MODEL !== undefined

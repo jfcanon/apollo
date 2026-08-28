@@ -86,3 +86,15 @@ export async function synthesizeSpeechWithWorkersAi(input: {
 
   throw new Error('TTS devolvió un formato de audio desconocido');
 }
+
+// The Workers AI binding is optional now that the default provider is local
+// (wrangler.jsonc no longer declares it); the workersai path fails fast with a
+// clear message instead of a TypeError deep inside AI.run.
+export function requireWorkersAiBinding(environment: { readonly AI?: Ai }): Ai {
+  if (environment.AI === undefined) {
+    throw new Error(
+      'VOICE_PROVIDER=workersai requiere el binding "ai" en wrangler.jsonc',
+    );
+  }
+  return environment.AI;
+}

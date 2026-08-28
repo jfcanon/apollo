@@ -19,6 +19,8 @@ interface Env {
   LOCAL_STT_URL?: string;
   LOCAL_LLM_URL?: string;
   LOCAL_LLM_MODEL?: string;
+  // Workers AI binding is no longer declared in wrangler.jsonc (local providers); kept optional for the workersai path.
+  AI?: Ai;
   LLM_BASE_URL?: string;
   LLM_API_KEY?: string;
   LLM_MODEL?: string;
@@ -74,6 +76,7 @@ declare namespace Cloudflare {
     LOCAL_STT_URL?: string;
     LOCAL_LLM_URL?: string;
     LOCAL_LLM_MODEL?: string;
+    AI?: Ai;
     LLM_BASE_URL?: string;
     LLM_API_KEY?: string;
     LLM_MODEL?: string;
