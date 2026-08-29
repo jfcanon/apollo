@@ -8,13 +8,15 @@
 #   ./jarvis.sh up          start everything that is not already running, then verify
 #   ./jarvis.sh status      show what is up / down (read-only, safe any time)
 #   ./jarvis.sh down        stop everything this script started
-#   ./jarvis.sh logs [name] tail a log (llm | stt | tunnel-llm | tunnel-stt)
+#   ./jarvis.sh logs [name] tail a log (llm | stt | tts | tunnel-llm | tunnel-stt | tunnel-tts)
 #
-# Four processes have to be alive for the ESP32 to work:
+# Six processes have to be alive for the ESP32 to work:
 #   1. llm         mlx_vlm.server  127.0.0.1:8080   local Qwen
 #   2. stt         whisper_server  0.0.0.0:8787     local Whisper
-#   3. tunnel-llm  cloudflared     llm.ygdcbtmc4u.uk  -> :8080
-#   4. tunnel-stt  cloudflared     stt.ygdcbtmc4u.uk  -> :8787
+#   3. tts         tts_server      0.0.0.0:8788     local Kokoro TTS (NID-534)
+#   4. tunnel-llm  cloudflared     llm.ygdcbtmc4u.uk  -> :8080
+#   5. tunnel-stt  cloudflared     stt.ygdcbtmc4u.uk  -> :8787
+#   6. tunnel-tts  cloudflared     tts.ygdcbtmc4u.uk  -> :8788
 # Apollo itself runs on Cloudflare and needs nothing after a reboot.
 #
 # Versioned here (apollo/ops) for NID-530; the operator page that explains it
@@ -35,10 +37,14 @@ CF_DIR="$HOME/.cloudflared"
 STT_TUNNEL_ID="22bf6d7c-369b-4c84-8194-08ac93fd2471"
 STT_CONFIG="$CF_DIR/config-stt.yml"
 STT_CRED="$CF_DIR/$STT_TUNNEL_ID.json"
+# TTS tunnel (NID-534) — created through IaC (bsewr/talvi), never by hand. UUID placeholder until Terraform applies.
+TTS_TUNNEL_ID="${TTS_TUNNEL_ID:-00000000-0000-4000-a000-000000000000}"
+TTS_CONFIG="$CF_DIR/config-tts.yml"
+TTS_CRED="$CF_DIR/$TTS_TUNNEL_ID.json"
 
 LOG_DIR="$JARVIS_ROOT/.logs"
 RUN_DIR="$JARVIS_ROOT/.run"
-SERVICES=(llm stt tunnel-llm tunnel-stt)
+SERVICES=(llm stt tts tunnel-llm tunnel-stt tunnel-tts)
 
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
@@ -57,11 +63,14 @@ already_up() {
   case "$1" in
     llm)        port_busy 8080 ;;
     stt)        port_busy 8787 ;;
+    tts)        port_busy 8788 ;;
     tunnel-llm) pgrep -f 'cloudflared tunnel .*run.* llm$' >/dev/null 2>&1 || pid_alive tunnel-llm ;;
     # The stt tunnel may also be running from an older `--token eyJ...` invocation,
     # which carries no tunnel name on the command line — so fall back to probing the hostname.
     tunnel-stt) pgrep -f 'cloudflared tunnel .*whisper-stt' >/dev/null 2>&1 || pid_alive tunnel-stt \
                 || curl -sf -m 6 -o /dev/null https://stt.ygdcbtmc4u.uk/healthz ;;
+    tunnel-tts) pgrep -f 'cloudflared tunnel .*tts' >/dev/null 2>&1 || pid_alive tunnel-tts \
+                || curl -sf -m 6 -o /dev/null https://tts.ygdcbtmc4u.uk/healthz ;;
   esac
 }
 
@@ -98,11 +107,17 @@ cmd_bootstrap() {
   [ -x "$WHISPER_VENV/bin/python" ] || "$WHISPER_PY_BASE" -m venv "$WHISPER_VENV"
   "$WHISPER_VENV/bin/pip" install --quiet --upgrade pip
   "$WHISPER_VENV/bin/pip" install --quiet -r "$TIMON_DIR/scripts/requirements-whisper.txt"
+  "$WHISPER_VENV/bin/pip" install --quiet -r "$TIMON_DIR/scripts/requirements-tts.txt"
   if "$WHISPER_VENV/bin/python" -c 'import mlx_whisper' 2>/dev/null; then
     green "   mlx-whisper installed (GPU backend, ~0.4 s/clip)"
   else
     warn "   mlx-whisper NOT importable — will fall back to CPU (~9 s/clip)."
     warn "   Try a different base python:  WHISPER_PY_BASE=/opt/homebrew/bin/python3.11 ./jarvis.sh bootstrap"
+  fi
+  if "$WHISPER_VENV/bin/python" -c 'import mlx_audio' 2>/dev/null; then
+    green "   mlx-audio (Kokoro) installed — tts ~0.3-0.4 s warm"
+  else
+    warn "   mlx-audio NOT importable — tts will use piper/stub fallback."
   fi
 
   if [ ! -f "$STT_CRED" ]; then
@@ -121,6 +136,27 @@ ingress:
   - service: http_status:404
 EOF
   fi
+  # TTS tunnel credentials — IaC path (bsewr). If UUID still placeholder, skip.
+  if [[ "$TTS_TUNNEL_ID" != "00000000-0000-4000-a000-000000000000" ]]; then
+    if [ ! -f "$TTS_CRED" ]; then
+      echo "-- fetching tts tunnel credentials"
+      cloudflared tunnel token --cred-file "$TTS_CRED" tts && chmod 600 "$TTS_CRED"
+    fi
+    if [ ! -f "$TTS_CONFIG" ]; then
+      echo "-- writing $TTS_CONFIG"
+      cat >"$TTS_CONFIG" <<EOF
+tunnel: $TTS_TUNNEL_ID
+credentials-file: $TTS_CRED
+
+ingress:
+  - hostname: tts.ygdcbtmc4u.uk
+    service: http://localhost:8788
+  - service: http_status:404
+EOF
+    fi
+  else
+    warn "   TTS tunnel not yet created via IaC (TTS_TUNNEL_ID placeholder) — run terraform in bsewr then re-bootstrap"
+  fi
   green "bootstrap done — now run: ./jarvis.sh up"
 }
 
@@ -137,19 +173,33 @@ cmd_up() {
   already_up stt && echo "  stt  already running" || ( cd "$TIMON_DIR" && \
       start_bg stt "$WHISPER_VENV/bin/python" "$TIMON_DIR/scripts/whisper_server.py" )
 
+  already_up tts && echo "  tts  already running" || ( cd "$TIMON_DIR" && \
+      start_bg tts "$WHISPER_VENV/bin/python" "$TIMON_DIR/scripts/tts_server.py" )
+
   already_up tunnel-llm && echo "  tunnel-llm already running" || \
       start_bg tunnel-llm cloudflared tunnel --config "$CF_DIR/config.yml" run llm
   already_up tunnel-stt && echo "  tunnel-stt already running" || \
       start_bg tunnel-stt cloudflared tunnel --config "$STT_CONFIG" run whisper-stt
+  if [[ "$TTS_TUNNEL_ID" != "00000000-0000-4000-a000-000000000000" ]] && [ -f "$TTS_CONFIG" ]; then
+    already_up tunnel-tts && echo "  tunnel-tts already running" || \
+        start_bg tunnel-tts cloudflared tunnel --config "$TTS_CONFIG" run tts
+  else
+    warn "   skipping tunnel-tts (IaC not yet applied)"
+  fi
 
-  echo "== verify (first Whisper start downloads the model — can take a few minutes) =="
+  echo "== verify (first Whisper/Kokoro start downloads models — can take a few minutes) =="
   local rc=0
   wait_for http://127.0.0.1:8080/v1/models      60  "llm        local  :8080" || rc=1
   wait_for http://127.0.0.1:8787/healthz       600  "stt        local  :8787" || rc=1
+  wait_for http://127.0.0.1:8788/healthz       600  "tts        local  :8788" || rc=1
   wait_for https://llm.ygdcbtmc4u.uk/v1/models  60  "llm        public tunnel" || rc=1
   wait_for https://stt.ygdcbtmc4u.uk/healthz    60  "stt        public tunnel" || rc=1
+  if [[ "$TTS_TUNNEL_ID" != "00000000-0000-4000-a000-000000000000" ]]; then
+    wait_for https://tts.ygdcbtmc4u.uk/healthz    60  "tts        public tunnel" || rc=1
+  fi
   cmd_backend
-  [ "$rc" -eq 0 ] && green "all four up — talk to the ESP32" || red "something is down — ./jarvis.sh logs <name>"
+  cmd_tts_backend
+  [ "$rc" -eq 0 ] && green "all six up — talk to the ESP32" || red "something is down — ./jarvis.sh logs <name>"
   return "$rc"
 }
 
@@ -164,17 +214,30 @@ cmd_backend() {
   esac
 }
 
+cmd_tts_backend() {
+  local b
+  port_busy 8788 || { red "  tts backend: (tts is down — ./jarvis.sh up)"; return 0; }
+  b=$(curl -sf -m 5 http://127.0.0.1:8788/healthz | python3 -c 'import json,sys;print(json.load(sys.stdin).get("backend","<none>"))' 2>/dev/null)
+  case "$b" in
+    kokoro-mlx) green "  tts backend: kokoro-mlx (GPU, ~0.3-0.4 s warm)" ;;
+    piper)      green "  tts backend: piper (CPU/sherpa-onnx, ~40-150 ms)" ;;
+    stub)       warn  "  tts backend: stub (no mlx-audio/piper — CI fallback or missing deps)" ;;
+    *)          warn  "  tts backend: $b" ;;
+  esac
+}
+
 cmd_status() {
   echo "== status =="
   for s in "${SERVICES[@]}"; do
     already_up "$s" && green "  up    $s" || red "  down  $s"
   done
   echo "== endpoints =="
-  for u in http://127.0.0.1:8080/v1/models http://127.0.0.1:8787/healthz \
-           https://llm.ygdcbtmc4u.uk/v1/models https://stt.ygdcbtmc4u.uk/healthz; do
+  for u in http://127.0.0.1:8080/v1/models http://127.0.0.1:8787/healthz http://127.0.0.1:8788/healthz \
+           https://llm.ygdcbtmc4u.uk/v1/models https://stt.ygdcbtmc4u.uk/healthz https://tts.ygdcbtmc4u.uk/healthz; do
     printf '  %-45s %s\n' "$u" "$(curl -s -o /dev/null -m 8 -w '%{http_code}' "$u")"
   done
   cmd_backend
+  cmd_tts_backend
   echo "== apollo (cloudflare, nothing to start) =="
   printf '  %-45s %s\n' "apollo /health" \
     "$(curl -s -o /dev/null -m 8 -w '%{http_code}' https://apollo.ygdcbtmc4u.workers.dev/health)"
@@ -187,7 +250,7 @@ cmd_down() {
     if [ -f "$f" ] && kill -0 "$(cat "$f")" 2>/dev/null; then
       kill "$(cat "$f")" && echo "  stopped $s"
     else
-      echo "  $s not started by this script (check 'ps aux | grep -E \"mlx_vlm|whisper_server|cloudflared\"')"
+      echo "  $s not started by this script (check 'ps aux | grep -E \"mlx_vlm|whisper_server|tts_server|cloudflared\"')"
     fi
     rm -f "$f"
   done

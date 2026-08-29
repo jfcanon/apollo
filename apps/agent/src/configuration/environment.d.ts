@@ -16,6 +16,9 @@ interface Env {
   LLM_EXTRA_BODY?: string;
   STT_LANGUAGE?: string;
   LOCAL_STT_URL?: string;
+  LOCAL_TTS_URL?: string;
+  LOCAL_TTS_VOICE?: string;
+  LOCAL_TTS_MODEL?: string;
   LOCAL_LLM_URL?: string;
   LOCAL_LLM_MODEL?: string;
   AURA_SPEAKER?: string;
@@ -65,6 +68,9 @@ declare namespace Cloudflare {
     LLM_EXTRA_BODY?: string;
     STT_LANGUAGE?: string;
     LOCAL_STT_URL?: string;
+    LOCAL_TTS_URL?: string;
+    LOCAL_TTS_VOICE?: string;
+    LOCAL_TTS_MODEL?: string;
     LOCAL_LLM_URL?: string;
     LOCAL_LLM_MODEL?: string;
     AURA_SPEAKER?: string;

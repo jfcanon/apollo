@@ -1,6 +1,7 @@
 import { synthesizeSpeechWithElevenLabs } from '@/voice/elevenlabs';
 import { synthesizeSpeechWithGemini } from '@/voice/gemini';
 import { synthesizeSpeechWithGroq } from '@/voice/groq';
+import { synthesizeSpeechWithLocal } from '@/voice/localtts';
 import { synthesizeSpeechThroughCache } from '@/voice/ttscache';
 import { synthesizeSpeechWithWorkersAi } from '@/voice/workersai';
 
@@ -69,6 +70,24 @@ export async function synthesizeApolloSpeech(input: {
           ai: environment.AI,
           text,
           speaker,
+          modelId,
+        }),
+    });
+  }
+
+  if (environment.VOICE_PROVIDER === 'local') {
+    const voice = environment.LOCAL_TTS_VOICE ?? 'af_heart';
+    const modelId = environment.LOCAL_TTS_MODEL ?? 'kokoro';
+    return synthesizeSpeechThroughCache({
+      mediaBucket: environment.MEDIA,
+      text,
+      voiceId: voice,
+      modelId,
+      synthesize: () =>
+        synthesizeSpeechWithLocal({
+          localTtsUrl: environment.LOCAL_TTS_URL ?? 'https://tts.ygdcbtmc4u.uk',
+          text,
+          voice,
           modelId,
         }),
     });

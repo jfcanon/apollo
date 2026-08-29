@@ -27,6 +27,7 @@ import { TTS_PCM_CHANNEL_COUNT, TTS_PCM_SAMPLE_RATE_HZ } from '@/voice/elevenlab
 import { chatWithLlm } from '@/voice/llm';
 import { synthesizeSpeechWithGemini } from '@/voice/gemini';
 import { transcribeAudioWithLocal } from '@/voice/local';
+import { synthesizeSpeechWithLocal } from '@/voice/localtts';
 import { synthesizeSpeechWithGroq, transcribeAudioWithGroq } from '@/voice/groq';
 import {
   synthesizeSpeechWithWorkersAi,
@@ -193,17 +194,18 @@ export async function executeApolloTurn(
             synthesizeSpeechThroughCache({
               mediaBucket: dependencies.environment.MEDIA,
               text,
-              voiceId: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
-              modelId:
-                dependencies.environment.GEMINI_TTS_MODEL ??
-                'gemini-2.5-flash-preview-tts',
+              voiceId: dependencies.environment.LOCAL_TTS_VOICE ?? 'af_heart',
+              modelId: dependencies.environment.LOCAL_TTS_MODEL ?? 'kokoro',
               synthesize: () =>
-                synthesizeSpeechWithGemini({
-                  geminiApiKey: dependencies.environment.GEMINI_API_KEY ?? '',
+                synthesizeSpeechWithLocal({
+                  localTtsUrl:
+                    dependencies.environment.LOCAL_TTS_URL ?? 'https://tts.ygdcbtmc4u.uk',
                   text,
-                  voiceName: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
-                  ...(dependencies.environment.GEMINI_TTS_MODEL !== undefined
-                    ? { modelId: dependencies.environment.GEMINI_TTS_MODEL }
+                  ...(dependencies.environment.LOCAL_TTS_VOICE !== undefined
+                    ? { voice: dependencies.environment.LOCAL_TTS_VOICE }
+                    : {}),
+                  ...(dependencies.environment.LOCAL_TTS_MODEL !== undefined
+                    ? { modelId: dependencies.environment.LOCAL_TTS_MODEL }
                     : {}),
                 }),
             }),

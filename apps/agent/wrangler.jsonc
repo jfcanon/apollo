@@ -26,6 +26,10 @@
     // Tunnel URL for the local Whisper STT server (NID-515). Only used when
     // VOICE_PROVIDER selects the local provider.
     "LOCAL_STT_URL": "https://stt.ygdcbtmc4u.uk",
+    // Local TTS server (NID-534) — Kokoro-82M via mlx-audio behind tts.ygdcbtmc4u.uk:8788.
+    "LOCAL_TTS_URL": "https://tts.ygdcbtmc4u.uk",
+    "LOCAL_TTS_VOICE": "af_heart",
+    "LOCAL_TTS_MODEL": "kokoro",
     // Local Qwen LLM via tunnel (NID-470). LOCAL_LLM_MODEL must be the mlx repo id.
     "LOCAL_LLM_URL": "https://llm.ygdcbtmc4u.uk/v1",
     "LOCAL_LLM_MODEL": "mlx-community/Qwen3.8-27B-4bit",
