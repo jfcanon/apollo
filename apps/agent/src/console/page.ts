@@ -77,7 +77,7 @@ export function buildConsolePageHtml(): string {
   </div>
   <div class="device-row">
     <label>Input<select class="device-select" id="inputDevice"></select></label>
-    <label>Output<select class="device-select" id="outputDevice"></select></label>
+    <label id="outputLabel">Output<select class="device-select" id="outputDevice"></select></label>
   </div>
   <label class="toggle"><input type="checkbox" id="dialogue" checked /> Open dialogue</label>
   <label class="toggle"><input type="checkbox" id="headphones" /> Headphones (barge-in while speaking)</label>
@@ -108,7 +108,7 @@ const BARGE_IN_MS = 380;           // sustained speech needed to cut Jarvis off
 
 const els = Object.fromEntries(['status','mode','orb','level','caption','primary','talk','stop',
   'dialogue','headphones','confirm','confirmText','confirmYes','confirmNo',
-  'inputDevice','outputDevice','hint'
+  'inputDevice','outputDevice','outputLabel','hint'
   ].map((id) => [id, document.getElementById(id)]));
 
 const state = {
@@ -119,6 +119,9 @@ const state = {
   pendingConfirmId: null, closedByUser: false,
   selectedInputDeviceId: null, selectedOutputDeviceId: null,
   spaceHeld: false,
+  workletModuleLoaded: false,
+  inputChangeHandler: null,
+  outputChangeHandler: null,
 };
 
 const setStatus = (text) => { els.status.textContent = text; };
@@ -142,52 +145,50 @@ function saveDevicePreferences() {
   if (state.selectedOutputDeviceId) localStorage.setItem('jarvis.outputDeviceId', state.selectedOutputDeviceId);
 }
 
+function buildOptions(selectEl, devices, selectedId, isInput) {
+  selectEl.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = isInput ? 'Default microphone' : 'Default speaker';
+  placeholder.disabled = false;
+  selectEl.appendChild(placeholder);
+  for (const device of devices) {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = device.label || (isInput ? 'Microphone' : 'Speaker') + ' ' + device.deviceId.slice(0, 8);
+    if (device.deviceId === selectedId) option.selected = true;
+    selectEl.appendChild(option);
+  }
+}
+
 async function populateDeviceSelects() {
   if (!navigator.mediaDevices?.enumerateDevices) return;
   const devices = await navigator.mediaDevices.enumerateDevices();
   const audioInputs = devices.filter((d) => d.kind === 'audioinput');
   const audioOutputs = devices.filter((d) => d.kind === 'audiooutput');
 
-  const buildOptions = (selectEl, devices, selectedId) => {
-    selectEl.innerHTML = '';
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = selectEl.id === 'inputDevice' ? 'Default microphone' : 'Default speaker';
-    placeholder.disabled = false;
-    selectEl.appendChild(placeholder);
-    for (const device of devices) {
-      const option = document.createElement('option');
-      option.value = device.deviceId;
-      option.textContent = device.label || (selectEl.id === 'inputDevice' ? 'Microphone' : 'Speaker') + ' ' + device.deviceId.slice(0, 8);
-      if (device.deviceId === selectedId) option.selected = true;
-      selectEl.appendChild(option);
-    }
-  };
+  buildOptions(els.inputDevice, audioInputs, state.selectedInputDeviceId, true);
 
-  buildOptions(els.inputDevice, audioInputs, state.selectedInputDeviceId);
-  buildOptions(els.outputDevice, audioOutputs, state.selectedOutputDeviceId);
-
-  els.inputDevice.addEventListener('change', () => {
-    state.selectedInputDeviceId = els.inputDevice.value || null;
-    saveDevicePreferences();
-    if (state.capturing) restartCaptureWithNewDevice();
-  });
-  els.outputDevice.addEventListener('change', () => {
-    state.selectedOutputDeviceId = els.outputDevice.value || null;
-    saveDevicePreferences();
-    if (state.audioContext && state.audioContext.sinkId) {
-      state.audioContext.setSinkId(state.selectedOutputDeviceId).catch(() => {});
-    }
-  });
-
-  // Refresh device list when devices change
-  navigator.mediaDevices.addEventListener?.('devicechange', populateDeviceSelects);
+  // Hide output selector if setSinkId is not supported (e.g., Safari)
+  const hasSetSinkId = typeof AudioContext !== 'undefined' && typeof AudioContext.prototype.setSinkId === 'function';
+  if (hasSetSinkId) {
+    buildOptions(els.outputDevice, audioOutputs, state.selectedOutputDeviceId, false);
+    els.outputLabel.style.display = 'flex';
+  } else {
+    els.outputLabel.style.display = 'none';
+  }
 }
 
 async function restartCaptureWithNewDevice() {
-  stopCapture();
-  await startCapture();
-  if (els.dialogue.checked) armListening();
+  if (!state.capturing) return;
+  try {
+    stopCapture();
+    await startCapture();
+    if (els.dialogue.checked) armListening();
+  } catch (err) {
+    console.error('Failed to restart capture with new device:', err);
+    setCaption('Failed to switch microphone');
+  }
 }
 
 // --- Transport ------------------------------------------------------------
@@ -244,20 +245,19 @@ function onServerFrame(frame) {
     case 'ui_state':
       state.uiState = frame.state;
       if (frame.caption) setCaption(frame.caption);
-      // Orb + status driven by ui_state
+      // Orb driven by ui_state; status only for transport state
       if (!state.speaking) {
-        if (frame.state === 'listening') { setOrb('listening'); setStatus('listening'); }
-        else if (frame.state === 'thinking') { setOrb('thinking'); setStatus('thinking'); }
-        else if (frame.state === 'speaking') { setOrb('speaking'); setStatus('speaking'); }
-        else if (frame.state === 'idle') { setOrb('idle'); setStatus('idle'); }
-        else if (frame.state === 'confirm') { setOrb('idle'); setStatus('confirm'); }
+        if (frame.state === 'listening') { setOrb('listening'); }
+        else if (frame.state === 'thinking') { setOrb('thinking'); }
+        else if (frame.state === 'speaking') { setOrb('speaking'); }
+        else if (frame.state === 'idle') { setOrb('idle'); }
+        else if (frame.state === 'confirm') { setOrb('idle'); }
       }
       break;
     case 'tts_start':
       state.speaking = true; state.sequence = frame.sequence ?? 0;
       state.playedMs = 0; state.playQueue = []; state.nextPlayTime = 0;
       setOrb('speaking');
-      setStatus('speaking');
       break;
     case 'tts_end':
     case 'tts_aborted':
@@ -268,8 +268,8 @@ function onServerFrame(frame) {
       // The whole point of dialogue mode: reopen the mic without being asked.
       // expectsReply only says Jarvis asked something — in a conversation the
       // user may answer anything, so dialogue mode reopens regardless.
-      if (els.dialogue.checked) { armListening(); setStatus('listening'); setOrb('listening'); }
-      else { setOrb('idle'); setStatus('idle'); }
+      if (els.dialogue.checked) { armListening(); setOrb('listening'); }
+      else { setOrb('idle'); }
       break;
     case 'confirm_request':
       state.pendingConfirmId = frame.id;
@@ -363,9 +363,12 @@ async function startCapture() {
     },
   };
   state.micStream = await navigator.mediaDevices.getUserMedia(constraints);
-  const blobUrl = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: 'text/javascript' }));
-  await context.audioWorklet.addModule(blobUrl);
-  URL.revokeObjectURL(blobUrl);
+  if (!state.workletModuleLoaded) {
+    const blobUrl = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: 'text/javascript' }));
+    await context.audioWorklet.addModule(blobUrl);
+    URL.revokeObjectURL(blobUrl);
+    state.workletModuleLoaded = true;
+  }
 
   const source = context.createMediaStreamSource(state.micStream);
   const node = new AudioWorkletNode(context, 'mic-worklet');
@@ -377,7 +380,7 @@ async function startCapture() {
   state.workletNode = node;
   state.capturing = true;
 
-  // Set output device if selected
+  // Set output device if selected and supported
   if (state.selectedOutputDeviceId && context.setSinkId) {
     await context.setSinkId(state.selectedOutputDeviceId).catch(() => {});
   }
@@ -390,24 +393,20 @@ function stopCapture() {
 }
 
 let listeningArmed = false;
-function armListening() { listeningArmed = true; state.speechMs = 0; state.silenceMs = 0; setOrb('listening'); setStatus('listening'); }
+function armListening() { listeningArmed = true; state.speechMs = 0; state.silenceMs = 0; setOrb('listening'); }
 function disarmListening() { listeningArmed = false; }
 
 function beginUtterance() {
   state.inUtterance = true;
   send({ type: 'wake' });
-  send({ type: 'hold_start' });
   setOrb('listening');
-  setStatus('listening');
 }
 
 function endUtterance() {
   state.inUtterance = false;
   disarmListening();
-  send({ type: 'hold_end' });
   send({ type: 'audio_end' });
   setOrb('thinking');
-  setStatus('thinking');
 }
 
 const FRAME_MS = 128 / (${MIC_SAMPLE_RATE_HZ} / 1000); // worklet posts ~512 samples
@@ -423,6 +422,7 @@ function onMicFrame({ frame, rms }) {
       if (state.speechMs >= BARGE_IN_MS) {
         send({ type: 'abort' });
         stopPlayback();
+        state.speaking = false; // Optimistic clear so interruption audio uploads immediately
         armListening();
         beginUtterance();
       }
@@ -436,6 +436,8 @@ function onMicFrame({ frame, rms }) {
 
   if (state.inUtterance) {
     if (frame) state.socket?.send(frame.buffer ?? frame);
+    // When Space is held (push-to-talk), suppress VAD auto-end
+    if (state.spaceHeld) return;
     if (rms < SPEECH_RMS_OFF) {
       state.silenceMs += FRAME_MS;
       if (state.silenceMs >= TRAILING_SILENCE_MS) endUtterance();
@@ -445,6 +447,8 @@ function onMicFrame({ frame, rms }) {
     return;
   }
 
+  // When Space is held (push-to-talk), suppress VAD auto-start
+  if (state.spaceHeld) return;
   if (rms > SPEECH_RMS_ON) {
     state.speechMs += FRAME_MS;
     if (state.speechMs >= MIN_SPEECH_MS) { beginUtterance(); state.silenceMs = 0; }
@@ -474,11 +478,11 @@ els.talk.addEventListener('click', () => {
   else { armListening(); beginUtterance(); }
 });
 
-els.stop.addEventListener('click', () => { send({ type: 'abort' }); stopPlayback(); setOrb('idle'); setStatus('idle'); });
+els.stop.addEventListener('click', () => { send({ type: 'abort' }); stopPlayback(); state.speaking = false; setOrb('idle'); });
 
 els.dialogue.addEventListener('change', () => {
-  if (els.dialogue.checked) { armListening(); setStatus('listening'); }
-  else { disarmListening(); setOrb('idle'); setStatus('idle'); }
+  if (els.dialogue.checked) { armListening(); setOrb('listening'); }
+  else { disarmListening(); setOrb('idle'); }
 });
 
 els.confirmYes.addEventListener('click', () => { send({ type: 'confirm', ok: true }); els.confirm.classList.remove('open'); });
@@ -486,6 +490,16 @@ els.confirmNo.addEventListener('click', () => { send({ type: 'confirm', ok: fals
 
 // Keyboard push-to-talk: hold Space = hold_start/hold_end, Esc = abort
 document.addEventListener('keydown', (e) => {
+  // Guard against keys during confirm modal
+  if (els.confirm.classList.contains('open')) {
+    if (e.code === 'Escape') {
+      e.preventDefault();
+      send({ type: 'confirm', ok: false });
+      els.confirm.classList.remove('open');
+    }
+    return;
+  }
+
   if (e.code === 'Space' && !state.spaceHeld && !e.repeat) {
     e.preventDefault();
     state.spaceHeld = true;
@@ -495,6 +509,7 @@ document.addEventListener('keydown', (e) => {
       // Barge-in via keyboard
       send({ type: 'abort' });
       stopPlayback();
+      state.speaking = false; // Optimistic clear so interruption audio uploads immediately
     }
     armListening();
     beginUtterance();
@@ -503,10 +518,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     send({ type: 'abort' });
     stopPlayback();
+    state.speaking = false;
     disarmListening();
     state.inUtterance = false;
     setOrb('idle');
-    setStatus('idle');
   }
 });
 
@@ -526,12 +541,29 @@ document.addEventListener('visibilitychange', () => {
 
 // --- Init -----------------------------------------------------------------
 loadDevicePreferences();
-// Wait for user gesture to create AudioContext, but populate device list early
+// Populate device list early (without mic permission prompt)
+// Labels require permission; they'll update after Connect grants it.
 if (navigator.mediaDevices?.enumerateDevices) {
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(() => populateDeviceSelects()).catch(() => populateDeviceSelects());
-  // Also try without prompting if permission already granted
   populateDeviceSelects();
+  navigator.mediaDevices.addEventListener?.('devicechange', populateDeviceSelects);
 }
+
+// Bind device change handlers once
+state.inputChangeHandler = () => {
+  state.selectedInputDeviceId = els.inputDevice.value || null;
+  saveDevicePreferences();
+  if (state.capturing) restartCaptureWithNewDevice();
+};
+state.outputChangeHandler = () => {
+  state.selectedOutputDeviceId = els.outputDevice.value || null;
+  saveDevicePreferences();
+  if (state.audioContext && state.audioContext.setSinkId) {
+    const deviceId = state.selectedOutputDeviceId || undefined;
+    state.audioContext.setSinkId(deviceId).catch(() => {});
+  }
+};
+els.inputDevice.addEventListener('change', state.inputChangeHandler);
+els.outputDevice.addEventListener('change', state.outputChangeHandler);
 </script>
 </body>
 </html>`;
