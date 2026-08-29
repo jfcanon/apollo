@@ -19,6 +19,10 @@
     "LLM_BASE_URL": "https://api.deepseek.com",
     "LLM_MODEL": "deepseek-chat",
     "STT_LANGUAGE": "en",
+    // Language handling (NID-474 benchmark): explicit language wins over auto-detect.
+    // ES WER: language=es=24.2%, auto=39.6%, language=en=51.4% (mlx backend).
+    // EN WER: language=en=4.5%, auto=4.5%, language=es=13.0%.
+    // Recommendation: set STT_LANGUAGE per device (en/es), never omit.
     // Tunnel URL for the local Whisper STT server (NID-515). Only used when
     // VOICE_PROVIDER selects the local provider.
     "LOCAL_STT_URL": "https://stt.ygdcbtmc4u.uk",
