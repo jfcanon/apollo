@@ -78,14 +78,32 @@ jobs:
           # repo-relative.
           cache-dependency-path: apps/mac-listener/pyproject.toml
 
-      # sounddevice is deliberately absent: it needs PortAudio and a sound card,
-      # and nothing under test touches audio hardware. The wake word and VAD do
-      # run for real, on the committed WAVs.
+      # Two deliberate omissions.
+      #
+      # sounddevice: needs PortAudio and a sound card, and nothing under test
+      # touches audio hardware. The wake word and VAD do run for real.
+      #
+      # tflite-runtime: openWakeWord declares it on Linux only, and it has no
+      # wheel for 3.12 -- so a plain `pip install openwakeword` silently
+      # backtracks to 0.4.0, which moved `download_models` and would test a
+      # different library than the Mac runs. We only ever use the ONNX path, so
+      # the package goes in with --no-deps over its real runtime dependencies.
       - name: Install
-        run: pip install numpy onnxruntime openwakeword pytest
+        run: |
+          pip install numpy onnxruntime tqdm scipy scikit-learn requests pytest
+          pip install --no-deps 'openwakeword>=0.6.0,<0.7'
 
       - name: Download wake-word models
-        run: python -c "import openwakeword.utils; openwakeword.utils.download_models(['hey_jarvis'])"
+        run: |
+          python - <<'PY'
+          import importlib.metadata
+
+          import openwakeword.utils
+
+          version = importlib.metadata.version("openwakeword")
+          assert version.startswith("0.6."), f"expected openWakeWord 0.6.x, got {version}"
+          openwakeword.utils.download_models(["hey_jarvis"])
+          PY
 
       - name: Run tests
         run: PYTHONPATH=. pytest -q
