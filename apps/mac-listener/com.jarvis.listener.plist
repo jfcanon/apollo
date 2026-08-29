@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd job for the "hey jarvis" listener.
+
+  Install:
+    cp com.jarvis.listener.plist ~/Library/LaunchAgents/
+    # edit the two paths below to match this checkout, then:
+    launchctl load  ~/Library/LaunchAgents/com.jarvis.listener.plist
+    launchctl start com.jarvis.listener
+
+  A LaunchAgent (not a LaunchDaemon) on purpose: it needs the logged-in user's
+  audio session and Keychain, and microphone permission is granted per user.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.jarvis.listener</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/CHANGE_ME/orca/projects/jarvis/apollo/apps/mac-listener/.venv/bin/python</string>
+    <string>-m</string>
+    <string>jarvis_listener</string>
+    <string>run</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/CHANGE_ME/orca/projects/jarvis/apollo/apps/mac-listener</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>.</string>
+    <!-- Turn on with headphones; on speakers Jarvis interrupts himself. -->
+    <key>JARVIS_LISTENER_BARGE_IN</key>
+    <string>0</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/jarvis-listener.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/jarvis-listener.log</string>
+
+  <!-- The daemon reconnects on its own; let it, rather than thrashing launchd. -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>

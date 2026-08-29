@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      listener: ${{ steps.filter.outputs.listener }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -36,6 +37,9 @@ jobs:
               - '!.claude/**'
               - '!.vscode/**'
               - '!**/.DS_Store'
+            listener:
+              - 'apps/mac-listener/**'
+              - 'apps/agent/src/protocol/**'
 
   secrets:
     name: Secrets
@@ -51,6 +55,40 @@ jobs:
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  listener:
+    name: Mac listener
+    needs: changes
+    if: needs.changes.outputs.listener == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/mac-listener
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          # `uses` steps ignore defaults.run.working-directory, so this stays
+          # repo-relative.
+          cache-dependency-path: apps/mac-listener/pyproject.toml
+
+      # sounddevice is deliberately absent: it needs PortAudio and a sound card,
+      # and nothing under test touches audio hardware. The wake word and VAD do
+      # run for real, on the committed WAVs.
+      - name: Install
+        run: pip install numpy onnxruntime openwakeword pytest
+
+      - name: Download wake-word models
+        run: python -c "import openwakeword.utils; openwakeword.utils.download_models(['hey_jarvis'])"
+
+      - name: Run tests
+        run: PYTHONPATH=. pytest -q
 
   quality:
     name: Quality
