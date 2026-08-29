@@ -12,6 +12,17 @@ from jarvis_listener.config import load_config
 from jarvis_listener.keychain import KeychainError
 
 
+def configure_logging(is_verbose: bool) -> None:
+    logging.basicConfig(
+        level=logging.DEBUG if is_verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+    # `websockets` logs the full request line at DEBUG, which contains the
+    # device secret in the query string. Our own connect line is redacted; this
+    # keeps --verbose from undoing that.
+    logging.getLogger("websockets").setLevel(logging.WARNING)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="jarvis_listener", description=__doc__)
     parser.add_argument(
@@ -20,14 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verbose", action="store_true")
     arguments = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.DEBUG if arguments.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
-    # `websockets` logs the full request line at DEBUG, which contains the
-    # device secret in the query string. Our own connect line is redacted; this
-    # keeps --verbose from undoing that.
-    logging.getLogger("websockets").setLevel(logging.WARNING)
+    configure_logging(arguments.verbose)
 
     if arguments.command == "devices":
         print(describe_devices())

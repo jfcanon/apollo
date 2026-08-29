@@ -54,14 +54,11 @@ def test_a_missing_keychain_item_explains_how_to_add_it() -> None:
     assert "security add-generic-password" in str(failure.value)
 
 
-def test_the_websockets_logger_is_muted_so_verbose_cannot_leak_the_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_the_websockets_logger_is_muted_so_verbose_cannot_leak_the_token() -> None:
     # `websockets` logs the full request line, token included, at DEBUG. The
     # entry point mutes it; without that, `run --verbose` writes the device
     # secret to /tmp/jarvis-listener.log on every connect.
-    from jarvis_listener.__main__ import main
+    from jarvis_listener.__main__ import configure_logging
 
-    monkeypatch.setattr("jarvis_listener.client.describe_devices", lambda: "")
-    main(["devices"])
+    configure_logging(is_verbose=True)
     assert logging.getLogger("websockets").level >= logging.WARNING
