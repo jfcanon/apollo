@@ -5,7 +5,7 @@ import { createInactiveDeskFocusState } from '@/focus/logic';
 import { addMemoryRecord, type MemorySqlExecutor } from '@/memory/store';
 import { buildToolDefinitionMap } from '@/tools/router';
 import type { ToolDefinition } from '@/tools/types';
-import { runDeskTurn } from '@/turn/run';
+import { runDeskTurn, shouldConfirmStt, buildSttConfirmationPrompt } from '@/turn/run';
 import type { OpenRouterChatMessage } from '@/voice/llm';
 
 function createInMemorySqlExecutor(): MemorySqlExecutor {
@@ -48,6 +48,243 @@ function createInMemorySqlExecutor(): MemorySqlExecutor {
 const fakeEnvironment = createFakeApolloEnvironment();
 
 describe('runDeskTurn', () => {
+  describe('STT confidence gate', () => {
+    it('shouldConfirmStt returns true for short transcript (< 3 words)', () => {
+      expect(shouldConfirmStt({ transcript: 'hi' }, 'en')).toBe(true);
+      expect(shouldConfirmStt({ transcript: 'hello world' }, 'en')).toBe(true);
+      expect(shouldConfirmStt({ transcript: 'hello world test' }, 'en')).toBe(false);
+    });
+
+    it('shouldConfirmStt returns true for low avgLogprob', () => {
+      expect(
+        shouldConfirmStt({ transcript: 'hello world test', avgLogprob: -0.6 }, 'en'),
+      ).toBe(true);
+      expect(
+        shouldConfirmStt({ transcript: 'hello world test', avgLogprob: -0.5 }, 'en'),
+      ).toBe(false);
+      expect(
+        shouldConfirmStt({ transcript: 'hello world test', avgLogprob: -0.4 }, 'en'),
+      ).toBe(false);
+    });
+
+    it('shouldConfirmStt returns true for high noSpeechProb', () => {
+      expect(
+        shouldConfirmStt({ transcript: 'hello world test', noSpeechProb: 0.4 }, 'en'),
+      ).toBe(true);
+      expect(
+        shouldConfirmStt({ transcript: 'hello world test', noSpeechProb: 0.3 }, 'en'),
+      ).toBe(false);
+      expect(
+        shouldConfirmStt({ transcript: 'hello world test', noSpeechProb: 0.2 }, 'en'),
+      ).toBe(false);
+    });
+
+    it('buildSttConfirmationPrompt returns Spanish prompt for es speechMode', () => {
+      const result = buildSttConfirmationPrompt({ transcript: 'hola mundo' }, 'es');
+      expect(result).toBe('¿Querés decir "hola mundo"?');
+    });
+
+    it('buildSttConfirmationPrompt returns English prompt for en speechMode', () => {
+      const result = buildSttConfirmationPrompt({ transcript: 'hello world' }, 'en');
+      expect(result).toBe('Did you mean "hello world"?');
+    });
+
+    it('buildSttConfirmationPrompt returns Spanish prompt for es-419 speechMode', () => {
+      const result = buildSttConfirmationPrompt({ transcript: 'hello world' }, 'es-419');
+      expect(result).toBe('¿Querés decir "hello world"?');
+    });
+  });
+
+  describe('STT confidence gate in runDeskTurn', () => {
+    it('triggers NEED_CONFIRM when transcript is short (< 3 words)', async () => {
+      const sqlExecutor = createInMemorySqlExecutor();
+      const output = await runDeskTurn({
+        audioBuffer: new TextEncoder().encode('audio').buffer as ArrayBuffer,
+        speechMode: 'default',
+        focusState: createInactiveDeskFocusState(),
+        sqlExecutor,
+        environment: fakeEnvironment,
+        toolDefinitionMap: buildToolDefinitionMap([]),
+        nowMilliseconds: 10,
+        adapters: {
+          stt: async () => ({ transcript: 'hi', avgLogprob: -0.1, noSpeechProb: 0.01 }),
+          llm: async () => ({ text: 'should not reach', toolCallList: [] }),
+          tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
+        },
+      });
+
+      expect(output.uiEventList).toContain('NEED_CONFIRM');
+      expect(output.pendingConfirmation?.toolName).toBe('stt_confirm');
+      expect(output.spokenText).toContain('Did you mean');
+    });
+
+    it('triggers NEED_CONFIRM when avgLogprob is low', async () => {
+      const sqlExecutor = createInMemorySqlExecutor();
+      const output = await runDeskTurn({
+        audioBuffer: new TextEncoder().encode('audio').buffer as ArrayBuffer,
+        speechMode: 'default',
+        focusState: createInactiveDeskFocusState(),
+        sqlExecutor,
+        environment: fakeEnvironment,
+        toolDefinitionMap: buildToolDefinitionMap([]),
+        nowMilliseconds: 10,
+        adapters: {
+          stt: async () => ({
+            transcript: 'hello world test',
+            avgLogprob: -0.6,
+            noSpeechProb: 0.01,
+          }),
+          llm: async () => ({ text: 'should not reach', toolCallList: [] }),
+          tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
+        },
+      });
+
+      expect(output.uiEventList).toContain('NEED_CONFIRM');
+      expect(output.pendingConfirmation?.toolName).toBe('stt_confirm');
+    });
+
+    it('triggers NEED_CONFIRM when noSpeechProb is high', async () => {
+      const sqlExecutor = createInMemorySqlExecutor();
+      const output = await runDeskTurn({
+        audioBuffer: new TextEncoder().encode('audio').buffer as ArrayBuffer,
+        speechMode: 'default',
+        focusState: createInactiveDeskFocusState(),
+        sqlExecutor,
+        environment: fakeEnvironment,
+        toolDefinitionMap: buildToolDefinitionMap([]),
+        nowMilliseconds: 10,
+        adapters: {
+          stt: async () => ({
+            transcript: 'hello world test',
+            avgLogprob: -0.1,
+            noSpeechProb: 0.4,
+          }),
+          llm: async () => ({ text: 'should not reach', toolCallList: [] }),
+          tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
+        },
+      });
+
+      expect(output.uiEventList).toContain('NEED_CONFIRM');
+      expect(output.pendingConfirmation?.toolName).toBe('stt_confirm');
+    });
+
+    it('does NOT trigger NEED_CONFIRM when confidence is high', async () => {
+      let llmCalled = false;
+      const sqlExecutor = createInMemorySqlExecutor();
+      const output = await runDeskTurn({
+        audioBuffer: new TextEncoder().encode('audio').buffer as ArrayBuffer,
+        speechMode: 'default',
+        focusState: createInactiveDeskFocusState(),
+        sqlExecutor,
+        environment: fakeEnvironment,
+        toolDefinitionMap: buildToolDefinitionMap([]),
+        nowMilliseconds: 10,
+        adapters: {
+          stt: async () => ({
+            transcript: 'hello world test',
+            avgLogprob: -0.1,
+            noSpeechProb: 0.01,
+          }),
+          llm: async () => {
+            llmCalled = true;
+            return { text: 'OK', toolCallList: [] };
+          },
+          tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
+        },
+      });
+
+      expect(output.uiEventList).not.toContain('NEED_CONFIRM');
+      expect(llmCalled).toBe(true);
+      expect(output.pendingConfirmation).toBeUndefined();
+    });
+
+    it('uses Spanish confirmation prompt when speechMode is es', async () => {
+      const sqlExecutor = createInMemorySqlExecutor();
+      const output = await runDeskTurn({
+        audioBuffer: new TextEncoder().encode('audio').buffer as ArrayBuffer,
+        speechMode: 'es',
+        focusState: createInactiveDeskFocusState(),
+        sqlExecutor,
+        environment: fakeEnvironment,
+        toolDefinitionMap: buildToolDefinitionMap([]),
+        nowMilliseconds: 10,
+        adapters: {
+          stt: async () => ({ transcript: 'hi', avgLogprob: -0.1, noSpeechProb: 0.01 }),
+          llm: async () => ({ text: 'should not reach', toolCallList: [] }),
+          tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
+        },
+      });
+
+      expect(output.uiEventList).toContain('NEED_CONFIRM');
+      expect(output.spokenText).toContain('¿Querés decir');
+    });
+  });
+
+  describe('STT confirmation handling', () => {
+    it('proceeds to LLM when user confirms STT transcript', async () => {
+      let llmCalled = false;
+      const sqlExecutor = createInMemorySqlExecutor();
+      const output = await runDeskTurn({
+        text: 'hello world',
+        speechMode: 'default',
+        focusState: createInactiveDeskFocusState(),
+        sqlExecutor,
+        environment: fakeEnvironment,
+        toolDefinitionMap: buildToolDefinitionMap([]),
+        nowMilliseconds: 10,
+        pendingConfirmation: {
+          id: 'test-confirm-id',
+          toolName: 'stt_confirm',
+          args: { transcript: 'hello world' },
+          summary: 'Did you mean "hello world"?',
+          expiresAt: Date.now() + 30_000,
+        },
+        confirmOk: true,
+        adapters: {
+          stt: async () => ({ transcript: '' }),
+          llm: async () => {
+            llmCalled = true;
+            return { text: 'OK', toolCallList: [] };
+          },
+          tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
+        },
+      });
+
+      expect(llmCalled).toBe(true);
+      expect(output.pendingConfirmation).toBeUndefined();
+      expect(output.uiEventList).not.toContain('NEED_CONFIRM');
+    });
+
+    it('returns CANCEL and asks for repeat when user rejects STT transcript', async () => {
+      const sqlExecutor = createInMemorySqlExecutor();
+      const output = await runDeskTurn({
+        audioBuffer: new TextEncoder().encode('audio').buffer as ArrayBuffer,
+        speechMode: 'default',
+        focusState: createInactiveDeskFocusState(),
+        sqlExecutor,
+        environment: fakeEnvironment,
+        toolDefinitionMap: buildToolDefinitionMap([]),
+        nowMilliseconds: 10,
+        pendingConfirmation: {
+          id: 'test-confirm-id',
+          toolName: 'stt_confirm',
+          args: { transcript: 'hello world' },
+          summary: 'Did you mean "hello world"?',
+          expiresAt: Date.now() + 30_000,
+        },
+        confirmOk: false,
+        adapters: {
+          stt: async () => ({ transcript: '' }),
+          llm: async () => ({ text: 'should not reach', toolCallList: [] }),
+          tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
+        },
+      });
+
+      expect(output.uiEventList).toContain('CANCEL');
+      expect(output.spokenText).toBe('Entendido, repítelo por favor.');
+      expect(output.expectsReply).toBe(true);
+    });
+  });
   it('text turn recalls memory and speaks', async () => {
     const sqlExecutor = createInMemorySqlExecutor();
     await addMemoryRecord(sqlExecutor, 'tomo mate a la mañana', 1, () => 'm1');

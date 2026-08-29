@@ -33,7 +33,7 @@ export type SttResult = {
   readonly latencyMs?: number;
 };
 
-function shouldConfirmStt(result: SttResult, _speechMode: string): boolean {
+export function shouldConfirmStt(result: SttResult, _speechMode: string): boolean {
   // Short transcript (< 3 words) triggers confirmation
   const wordCount = result.transcript.trim().split(/\s+/).filter(Boolean).length;
   if (wordCount < 3) {
@@ -50,7 +50,10 @@ function shouldConfirmStt(result: SttResult, _speechMode: string): boolean {
   return false;
 }
 
-function buildSttConfirmationPrompt(result: SttResult, speechMode: string): string {
+export function buildSttConfirmationPrompt(
+  result: SttResult,
+  speechMode: string,
+): string {
   const isSpanish = speechMode === 'es' || speechMode === 'es-419';
   if (isSpanish) {
     return `¿Querés decir "${result.transcript}"?`;
@@ -178,36 +181,58 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
   let resolvedConfirmationResult: ToolExecutionResult | undefined;
 
   if (pendingConfirmation !== undefined && input.confirmOk !== undefined) {
-    const resolved = await resolvePendingToolConfirmation(
-      input.toolDefinitionMap,
-      pendingConfirmation,
-      input.confirmOk,
-      {
-        environment: input.environment,
-        nowMilliseconds: input.nowMilliseconds,
-        deviceId: input.deviceId,
-        effects: input.effects,
-      },
-    );
-    if (!('cancelled' in resolved)) {
+    // Handle STT confirmation specially: it's not a real tool, just transcript verification
+    if (pendingConfirmation.toolName === 'stt_confirm') {
+      if (!input.confirmOk) {
+        uiEventList.push('CANCEL');
+        return {
+          uiEventList,
+          transcript: '',
+          spokenText: 'Entendido, repítelo por favor.',
+          speechMode: input.speechMode,
+          focusState: input.focusState,
+          memoryContentList: [],
+          toolResultList,
+          expectsReply: true,
+        };
+      }
+      // User confirmed the transcript - proceed normally
       resolvedConfirmation = pendingConfirmation;
-      resolvedConfirmationResult = resolved;
+      resolvedConfirmationResult = { ok: true, summary: 'Transcripción confirmada' };
+      pendingConfirmation = undefined;
+      toolResultList.push(resolvedConfirmationResult);
+    } else {
+      const resolved = await resolvePendingToolConfirmation(
+        input.toolDefinitionMap,
+        pendingConfirmation,
+        input.confirmOk,
+        {
+          environment: input.environment,
+          nowMilliseconds: input.nowMilliseconds,
+          deviceId: input.deviceId,
+          effects: input.effects,
+        },
+      );
+      if (!('cancelled' in resolved)) {
+        resolvedConfirmation = pendingConfirmation;
+        resolvedConfirmationResult = resolved;
+      }
+      pendingConfirmation = undefined;
+      if ('cancelled' in resolved) {
+        uiEventList.push('CANCEL');
+        return {
+          uiEventList,
+          transcript: input.text?.trim() ?? '',
+          spokenText: 'Cancelado.',
+          speechMode: input.speechMode,
+          focusState: input.focusState,
+          memoryContentList: [],
+          toolResultList,
+          expectsReply: false,
+        };
+      }
+      toolResultList.push(resolved);
     }
-    pendingConfirmation = undefined;
-    if ('cancelled' in resolved) {
-      uiEventList.push('CANCEL');
-      return {
-        uiEventList,
-        transcript: input.text?.trim() ?? '',
-        spokenText: 'Cancelado.',
-        speechMode: input.speechMode,
-        focusState: input.focusState,
-        memoryContentList: [],
-        toolResultList,
-        expectsReply: false,
-      };
-    }
-    toolResultList.push(resolved);
   }
 
   let userText = input.text?.trim() ?? '';
