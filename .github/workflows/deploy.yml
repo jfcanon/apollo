@@ -17,6 +17,7 @@ on:
       - 'documentation/**'
       - '.claude/**'
       - '.vscode/**'
+      - 'ops/**'
   workflow_dispatch:
 
 permissions:
