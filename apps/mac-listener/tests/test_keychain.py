@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 import pytest
 
@@ -39,6 +40,14 @@ def test_redaction_leaves_a_tokenless_url_alone() -> None:
     assert redact_url("wss://example.com/desk") == "wss://example.com/desk"
 
 
+def test_a_missing_keychain_item_raises_rather_than_returning_empty() -> None:
+    # An empty secret would produce a token-less URL and a confusing 401 rather
+    # than a message naming the missing item.
+    with pytest.raises(KeychainError):
+        read_device_secret("jarvis-listener-does-not-exist", "nobody")
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="`security` is macOS-only")
 def test_a_missing_keychain_item_explains_how_to_add_it() -> None:
     with pytest.raises(KeychainError) as failure:
         read_device_secret("jarvis-listener-does-not-exist", "nobody")

@@ -90,7 +90,7 @@ jobs:
       # the package goes in with --no-deps over its real runtime dependencies.
       - name: Install
         run: |
-          pip install numpy onnxruntime tqdm scipy scikit-learn requests pytest
+          pip install numpy onnxruntime tqdm scipy scikit-learn requests websockets pytest
           pip install --no-deps 'openwakeword>=0.6.0,<0.7'
 
       - name: Download wake-word models
