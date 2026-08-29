@@ -32,12 +32,13 @@ QWEN_PY="$QWEN_DIR/.venv-mlx/bin/python"
 QWEN_MODEL="${QWEN_MODEL:-mlx-community/Qwen3.8-27B-4bit}"
 WHISPER_PY_BASE="${WHISPER_PY_BASE:-/opt/homebrew/bin/python3.12}"
 WHISPER_VENV="$TIMON_DIR/scripts/.venv"
+TTS_VENV="$TIMON_DIR/scripts/.venv-tts"
 
 CF_DIR="$HOME/.cloudflared"
 STT_TUNNEL_ID="22bf6d7c-369b-4c84-8194-08ac93fd2471"
 STT_CONFIG="$CF_DIR/config-stt.yml"
 STT_CRED="$CF_DIR/$STT_TUNNEL_ID.json"
-# TTS tunnel (NID-534) — created through IaC (bsewr/talvi), never by hand. UUID placeholder until Terraform applies.
+# TTS tunnel (NID-534) — created through IaC (talvi), never by hand. UUID placeholder until Terraform applies.
 TTS_TUNNEL_ID="${TTS_TUNNEL_ID:-00000000-0000-4000-a000-000000000000}"
 TTS_CONFIG="$CF_DIR/config-tts.yml"
 TTS_CRED="$CF_DIR/$TTS_TUNNEL_ID.json"
@@ -107,17 +108,25 @@ cmd_bootstrap() {
   [ -x "$WHISPER_VENV/bin/python" ] || "$WHISPER_PY_BASE" -m venv "$WHISPER_VENV"
   "$WHISPER_VENV/bin/pip" install --quiet --upgrade pip
   "$WHISPER_VENV/bin/pip" install --quiet -r "$TIMON_DIR/scripts/requirements-whisper.txt"
-  "$WHISPER_VENV/bin/pip" install --quiet -r "$TIMON_DIR/scripts/requirements-tts.txt"
   if "$WHISPER_VENV/bin/python" -c 'import mlx_whisper' 2>/dev/null; then
     green "   mlx-whisper installed (GPU backend, ~0.4 s/clip)"
   else
     warn "   mlx-whisper NOT importable — will fall back to CPU (~9 s/clip)."
     warn "   Try a different base python:  WHISPER_PY_BASE=/opt/homebrew/bin/python3.11 ./jarvis.sh bootstrap"
   fi
-  if "$WHISPER_VENV/bin/python" -c 'import mlx_audio' 2>/dev/null; then
-    green "   mlx-audio (Kokoro) installed — tts ~0.3-0.4 s warm"
+  echo "-- tts venv: $TTS_VENV (isolated from whisper to avoid mlx/transformers drift)"
+  [ -x "$TTS_VENV/bin/python" ] || "$WHISPER_PY_BASE" -m venv "$TTS_VENV"
+  "$TTS_VENV/bin/pip" install --quiet --upgrade pip
+  "$TTS_VENV/bin/pip" install --quiet -r "$TIMON_DIR/scripts/requirements-tts.txt"
+  if "$TTS_VENV/bin/python" -c 'import mlx_audio' 2>/dev/null; then
+    # Check tts extra
+    if "$TTS_VENV/bin/python" -c 'import misaki' 2>/dev/null; then
+      green "   mlx-audio[tts] (Kokoro) installed — tts ~0.3-0.4 s warm"
+    else
+      warn "   mlx-audio installed but tts extra missing (misaki not found) — will run as stub (503 until installed)"
+    fi
   else
-    warn "   mlx-audio NOT importable — tts will use piper/stub fallback."
+    warn "   mlx-audio NOT importable — tts will run as stub (degraded, 503) until installed"
   fi
 
   if [ ! -f "$STT_CRED" ]; then
@@ -136,7 +145,7 @@ ingress:
   - service: http_status:404
 EOF
   fi
-  # TTS tunnel credentials — IaC path (bsewr). If UUID still placeholder, skip.
+  # TTS tunnel credentials — IaC path (talvi). If UUID still placeholder, skip.
   if [[ "$TTS_TUNNEL_ID" != "00000000-0000-4000-a000-000000000000" ]]; then
     if [ ! -f "$TTS_CRED" ]; then
       echo "-- fetching tts tunnel credentials"
@@ -155,13 +164,13 @@ ingress:
 EOF
     fi
   else
-    warn "   TTS tunnel not yet created via IaC (TTS_TUNNEL_ID placeholder) — run terraform in bsewr then re-bootstrap"
+    warn "   TTS tunnel not yet created via IaC (TTS_TUNNEL_ID placeholder) — run terraform in talvi then re-bootstrap"
   fi
   green "bootstrap done — now run: ./jarvis.sh up"
 }
 
 cmd_up() {
-  [ -d "$TIMON_DIR" ] && [ -x "$WHISPER_VENV/bin/python" ] && [ -f "$STT_CONFIG" ] || {
+  [ -d "$TIMON_DIR" ] && [ -x "$WHISPER_VENV/bin/python" ] && [ -x "$TTS_VENV/bin/python" ] && [ -f "$STT_CONFIG" ] || {
     red "not bootstrapped yet — run: ./jarvis.sh bootstrap"; exit 1; }
   mkdir -p "$LOG_DIR" "$RUN_DIR"
   echo "== up =="
@@ -174,7 +183,7 @@ cmd_up() {
       start_bg stt "$WHISPER_VENV/bin/python" "$TIMON_DIR/scripts/whisper_server.py" )
 
   already_up tts && echo "  tts  already running" || ( cd "$TIMON_DIR" && \
-      start_bg tts "$WHISPER_VENV/bin/python" "$TIMON_DIR/scripts/tts_server.py" )
+      start_bg tts "$TTS_VENV/bin/python" "$TIMON_DIR/scripts/tts_server.py" )
 
   already_up tunnel-llm && echo "  tunnel-llm already running" || \
       start_bg tunnel-llm cloudflared tunnel --config "$CF_DIR/config.yml" run llm
@@ -215,14 +224,23 @@ cmd_backend() {
 }
 
 cmd_tts_backend() {
-  local b
+  local b status
   port_busy 8788 || { red "  tts backend: (tts is down — ./jarvis.sh up)"; return 0; }
-  b=$(curl -sf -m 5 http://127.0.0.1:8788/healthz | python3 -c 'import json,sys;print(json.load(sys.stdin).get("backend","<none>"))' 2>/dev/null)
+  local health_json
+  health_json=$(curl -sf -m 5 http://127.0.0.1:8788/healthz 2>/dev/null) || {
+    # 503 degraded still returns JSON but curl -sf treats it as failure; try without -f
+    health_json=$(curl -s -m 5 http://127.0.0.1:8788/healthz 2>/dev/null)
+  }
+  b=$(echo "$health_json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("backend","<none>"))' 2>/dev/null)
+  status=$(echo "$health_json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("status","<none>"))' 2>/dev/null)
+  if [ "$status" = "degraded" ]; then
+    warn "  tts backend: $b DEGRADED (model not loaded — check logs, will 502 on synthesize)"
+    return 0
+  fi
   case "$b" in
     kokoro-mlx) green "  tts backend: kokoro-mlx (GPU, ~0.3-0.4 s warm)" ;;
-    piper)      green "  tts backend: piper (CPU/sherpa-onnx, ~40-150 ms)" ;;
-    stub)       warn  "  tts backend: stub (no mlx-audio/piper — CI fallback or missing deps)" ;;
-    *)          warn  "  tts backend: $b" ;;
+    stub)       warn  "  tts backend: stub (CI fallback — sine tone, not real TTS)" ;;
+    *)          warn  "  tts backend: $b (status: $status)" ;;
   esac
 }
 

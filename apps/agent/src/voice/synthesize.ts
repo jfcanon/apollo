@@ -78,6 +78,27 @@ export async function synthesizeApolloSpeech(input: {
   if (environment.VOICE_PROVIDER === 'local') {
     const voice = environment.LOCAL_TTS_VOICE ?? 'af_heart';
     const modelId = environment.LOCAL_TTS_MODEL ?? 'kokoro';
+    const localTtsUrl = environment.LOCAL_TTS_URL;
+    // Gate: if LOCAL_TTS_URL not configured (or still placeholder before talvi IaC lands),
+    // degrade to Gemini instead of NXDOMAIN breakage (review HIGH-3).
+    if (localTtsUrl === undefined || localTtsUrl.trim() === '') {
+      const voiceName = environment.GEMINI_TTS_VOICE ?? 'Charon';
+      const geminiModelId =
+        environment.GEMINI_TTS_MODEL ?? 'gemini-2.5-flash-preview-tts';
+      return synthesizeSpeechThroughCache({
+        mediaBucket: environment.MEDIA,
+        text,
+        voiceId: voiceName,
+        modelId: geminiModelId,
+        synthesize: () =>
+          synthesizeSpeechWithGemini({
+            geminiApiKey: environment.GEMINI_API_KEY ?? '',
+            text,
+            voiceName,
+            modelId: geminiModelId,
+          }),
+      });
+    }
     return synthesizeSpeechThroughCache({
       mediaBucket: environment.MEDIA,
       text,
@@ -85,7 +106,7 @@ export async function synthesizeApolloSpeech(input: {
       modelId,
       synthesize: () =>
         synthesizeSpeechWithLocal({
-          localTtsUrl: environment.LOCAL_TTS_URL ?? 'https://tts.ygdcbtmc4u.uk',
+          localTtsUrl,
           text,
           voice,
           modelId,

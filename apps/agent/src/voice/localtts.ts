@@ -68,5 +68,29 @@ export async function synthesizeSpeechWithLocal(input: {
     return byteArray.buffer;
   }
 
+  if (!contentType.toLowerCase().startsWith('audio/')) {
+    const preview = new TextDecoder().decode(arrayBuffer.slice(0, 200));
+    throw new Error(
+      `TTS (local) devolvió content-type inesperado '${contentType}': ${preview.slice(0, 120)}`,
+    );
+  }
+  if (
+    contentType.toLowerCase().includes('audio/wav') ||
+    contentType.toLowerCase().includes('audio/x-wav')
+  ) {
+    throw new Error(
+      `TTS (local) devolvió WAV pero se solicitó PCM (content-type: ${contentType})`,
+    );
+  }
+  const rateMatch = /rate=(\d+)/i.exec(contentType);
+  if (rateMatch !== null) {
+    const sampleRateHz = Number.parseInt(rateMatch[1], 10);
+    if (sampleRateHz !== DEVICE_PCM_SAMPLE_RATE_HZ) {
+      throw new Error(
+        `TTS (local) devolvió ${sampleRateHz}Hz; el dispositivo requiere ${DEVICE_PCM_SAMPLE_RATE_HZ}Hz (content-type: ${contentType})`,
+      );
+    }
+  }
+
   return arrayBuffer;
 }

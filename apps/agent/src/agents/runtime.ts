@@ -141,12 +141,10 @@ export async function executeApolloTurn(
       }
     : dependencies.environment.VOICE_PROVIDER === 'local'
       ? {
-          // Local provider (NID-470): self-hosted Whisper STT + local Qwen LLM,
-          // both reached through Cloudflare tunnels, so the voice loop spends
-          // nothing on Groq/DeepSeek. TTS stays on Gemini until a $0 local TTS
-          // path exists. LOCAL_LLM_MODEL is separate from LLM_MODEL on purpose:
-          // the mlx server treats the model field as a HuggingFace repo id and
-          // returns 400 for a foreign name like "deepseek-chat".
+          // Local provider: self-hosted Whisper STT + local Qwen LLM + Kokoro TTS
+          // (NID-534) through Cloudflare tunnels. LOCAL_TTS_URL is gated so a
+          // missing tunnel (pre-IaC) degrades to Gemini instead of NXDOMAIN breakage.
+          // LOCAL_LLM_MODEL is separate from LLM_MODEL on purpose.
           stt: async (audioBuffer) => {
             const result = await transcribeAudioWithLocal({
               localSttUrl:
@@ -190,16 +188,35 @@ export async function executeApolloTurn(
               toolDefinitionList,
               ...(onTextDelta !== undefined ? { onTextDelta } : {}),
             }),
-          tts: async (text) =>
-            synthesizeSpeechThroughCache({
+          tts: async (text) => {
+            const localTtsUrl = dependencies.environment.LOCAL_TTS_URL;
+            if (localTtsUrl === undefined || localTtsUrl.trim() === '') {
+              return synthesizeSpeechThroughCache({
+                mediaBucket: dependencies.environment.MEDIA,
+                text,
+                voiceId: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+                modelId:
+                  dependencies.environment.GEMINI_TTS_MODEL ??
+                  'gemini-2.5-flash-preview-tts',
+                synthesize: () =>
+                  synthesizeSpeechWithGemini({
+                    geminiApiKey: dependencies.environment.GEMINI_API_KEY ?? '',
+                    text,
+                    voiceName: dependencies.environment.GEMINI_TTS_VOICE ?? 'Charon',
+                    ...(dependencies.environment.GEMINI_TTS_MODEL !== undefined
+                      ? { modelId: dependencies.environment.GEMINI_TTS_MODEL }
+                      : {}),
+                  }),
+              });
+            }
+            return synthesizeSpeechThroughCache({
               mediaBucket: dependencies.environment.MEDIA,
               text,
               voiceId: dependencies.environment.LOCAL_TTS_VOICE ?? 'af_heart',
               modelId: dependencies.environment.LOCAL_TTS_MODEL ?? 'kokoro',
               synthesize: () =>
                 synthesizeSpeechWithLocal({
-                  localTtsUrl:
-                    dependencies.environment.LOCAL_TTS_URL ?? 'https://tts.ygdcbtmc4u.uk',
+                  localTtsUrl,
                   text,
                   ...(dependencies.environment.LOCAL_TTS_VOICE !== undefined
                     ? { voice: dependencies.environment.LOCAL_TTS_VOICE }
@@ -208,7 +225,8 @@ export async function executeApolloTurn(
                     ? { modelId: dependencies.environment.LOCAL_TTS_MODEL }
                     : {}),
                 }),
-            }),
+            });
+          },
         }
       : dependencies.environment.VOICE_PROVIDER === 'groq' ||
           dependencies.environment.VOICE_PROVIDER === 'free'
