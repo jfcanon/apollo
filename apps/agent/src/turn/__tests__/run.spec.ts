@@ -62,7 +62,7 @@ describe('runDeskTurn', () => {
       toolDefinitionMap: buildToolDefinitionMap([]),
       nowMilliseconds: 10,
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async ({ messageList }) => {
           const systemMessage = messageList.find((message) => message.role === 'system');
           const systemPrompt =
@@ -102,7 +102,7 @@ describe('runDeskTurn', () => {
         return ['al usuario le gusta el café cargado'];
       },
       adapters: {
-        stt: async () => 'qué tomo a la mañana?',
+        stt: async () => ({ transcript: 'qué tomo a la mañana?' }),
         llm: async ({ messageList }) => {
           const systemMessage = messageList.find((message) => message.role === 'system');
           capturedSystemPrompt =
@@ -134,7 +134,7 @@ describe('runDeskTurn', () => {
         { role: 'assistant', content: 'podés ir a la costa o quedarte a leer' },
       ],
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async ({ messageList }) => {
           capturedMessageList = messageList;
           return { text: 'Listo, te las mando.', toolCallList: [] };
@@ -179,7 +179,7 @@ describe('runDeskTurn', () => {
         return [];
       },
       adapters: {
-        stt: async () => '  \n ',
+        stt: async () => ({ transcript: '  \n ' }),
         llm: async () => ({ text: 'nunca', toolCallList: [] }),
         tts: async () => new ArrayBuffer(0),
       },
@@ -206,7 +206,7 @@ describe('runDeskTurn', () => {
         return [];
       },
       adapters: {
-        stt: async () => '\n  qué hora es  \n',
+        stt: async () => ({ transcript: '\n  qué hora es  \n' }),
         llm: async () => ({ text: 'Son las tres.', toolCallList: [] }),
         tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
       },
@@ -232,7 +232,7 @@ describe('runDeskTurn', () => {
         return [];
       },
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async () => ({ text: 'nunca', toolCallList: [] }),
         tts: async () => new ArrayBuffer(0),
       },
@@ -264,7 +264,7 @@ describe('runDeskTurn', () => {
       toolDefinitionMap: buildToolDefinitionMap([unsafeTool]),
       nowMilliseconds: 10,
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async () => ({
           text: '',
           toolCallList: [
@@ -313,7 +313,7 @@ describe('runDeskTurn', () => {
       toolDefinitionMap: buildToolDefinitionMap([unsafeTool]),
       nowMilliseconds: 10,
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async ({ messageList }) => {
           capturedMessageList = messageList;
           return { text: 'Listo, ya arranqué con apollo.', toolCallList: [] };
@@ -364,7 +364,7 @@ describe('runDeskTurn', () => {
         captionList.push(caption);
       },
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async ({ messageList }) => {
           const hasToolResult = messageList.some((message) => message.role === 'tool');
           if (!hasToolResult) {
@@ -402,7 +402,7 @@ describe('runDeskTurn', () => {
       toolDefinitionMap: buildToolDefinitionMap([weatherTool]),
       nowMilliseconds: 10,
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async ({ messageList }) => {
           callCount += 1;
           if (callCount === 1) {
@@ -440,7 +440,7 @@ describe('runDeskTurn', () => {
       toolDefinitionMap: buildToolDefinitionMap([]),
       nowMilliseconds: 10,
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async ({ onTextDelta }) => {
           for (const word of longReply.split(' ')) {
             onTextDelta?.(`${word} `);
@@ -484,7 +484,7 @@ describe('runDeskTurn', () => {
       toolDefinitionMap: buildToolDefinitionMap([weatherTool]),
       nowMilliseconds: 10,
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async ({ onTextDelta }) => {
           llmCallCount += 1;
           if (llmCallCount === 1) {
@@ -528,7 +528,7 @@ describe('runDeskTurn', () => {
       toolDefinitionMap: buildToolDefinitionMap([]),
       nowMilliseconds: 10,
       adapters: {
-        stt: async () => '',
+        stt: async () => ({ transcript: '' }),
         llm: async () => ({ text: longReply, toolCallList: [] }),
         tts: async (text) => {
           synthesizedTextList.push(text);

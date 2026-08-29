@@ -25,8 +25,41 @@ import {
 
 const DEFAULT_MAX_TOOL_ROUND_COUNT = 3;
 
+export type SttResult = {
+  readonly transcript: string;
+  readonly avgLogprob?: number;
+  readonly noSpeechProb?: number;
+  readonly backend?: string;
+  readonly latencyMs?: number;
+};
+
+function shouldConfirmStt(result: SttResult, _speechMode: string): boolean {
+  // Short transcript (< 3 words) triggers confirmation
+  const wordCount = result.transcript.trim().split(/\s+/).filter(Boolean).length;
+  if (wordCount < 3) {
+    return true;
+  }
+  // Low confidence triggers confirmation
+  if (result.avgLogprob !== undefined && result.avgLogprob < -0.5) {
+    return true;
+  }
+  // High no-speech probability triggers confirmation
+  if (result.noSpeechProb !== undefined && result.noSpeechProb > 0.3) {
+    return true;
+  }
+  return false;
+}
+
+function buildSttConfirmationPrompt(result: SttResult, speechMode: string): string {
+  const isSpanish = speechMode === 'es' || speechMode === 'es-419';
+  if (isSpanish) {
+    return `¿Querés decir "${result.transcript}"?`;
+  }
+  return `Did you mean "${result.transcript}"?`;
+}
+
 export type VoiceAdapters = {
-  readonly stt: (audioBuffer: ArrayBuffer) => Promise<string>;
+  readonly stt: (audioBuffer: ArrayBuffer) => Promise<SttResult>;
   readonly llm: (input: {
     readonly messageList: readonly OpenRouterChatMessage[];
     readonly toolDefinitionList: readonly {
@@ -178,8 +211,10 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
   }
 
   let userText = input.text?.trim() ?? '';
+  let sttResult: SttResult | undefined;
   if (userText.length === 0 && input.audioBuffer !== undefined) {
-    userText = (await input.adapters.stt(input.audioBuffer)).trim();
+    sttResult = await input.adapters.stt(input.audioBuffer);
+    userText = sttResult.transcript.trim();
   }
   if (userText.length === 0) {
     uiEventList.push('CANCEL');
@@ -187,6 +222,34 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
       uiEventList,
       transcript: '',
       spokenText: 'No te escuché.',
+      speechMode: input.speechMode,
+      focusState: input.focusState,
+      memoryContentList: [],
+      toolResultList,
+      expectsReply: false,
+    };
+  }
+
+  // STT confidence gate: if confidence is low or transcript is very short,
+  // ask for confirmation before proceeding to LLM
+  if (sttResult !== undefined && shouldConfirmStt(sttResult, input.speechMode)) {
+    uiEventList.push('NEED_CONFIRM');
+    const confirmationPrompt = buildSttConfirmationPrompt(sttResult, input.speechMode);
+    const confirmAudio = await input.adapters
+      .tts(confirmationPrompt, APOLLO_TTS_VOICE)
+      .catch(() => undefined);
+    return {
+      uiEventList,
+      transcript: userText,
+      spokenText: confirmationPrompt,
+      ...(confirmAudio !== undefined ? { ttsAudio: confirmAudio } : {}),
+      pendingConfirmation: {
+        id: crypto.randomUUID(),
+        toolName: 'stt_confirm',
+        args: { transcript: userText },
+        summary: confirmationPrompt,
+        expiresAt: input.nowMilliseconds + 30_000,
+      },
       speechMode: input.speechMode,
       focusState: input.focusState,
       memoryContentList: [],

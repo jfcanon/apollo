@@ -2,14 +2,30 @@ import { z } from 'zod';
 
 const localTranscriptionResponseSchema = z.object({
   text: z.string().optional(),
+  duration: z.number().optional(),
+  language: z.string().optional(),
+  backend: z.string().optional(),
+  latency_ms: z.number().optional(),
+  avg_logprob: z.number().optional(),
+  no_speech_prob: z.number().optional(),
 });
+
+export type LocalTranscriptionResult = {
+  readonly transcript: string;
+  readonly duration: number | undefined;
+  readonly language: string | undefined;
+  readonly backend: string | undefined;
+  readonly latencyMs: number | undefined;
+  readonly avgLogprob: number | undefined;
+  readonly noSpeechProb: number | undefined;
+};
 
 export async function transcribeAudioWithLocal(input: {
   readonly localSttUrl: string;
   readonly audioBuffer: ArrayBuffer;
   readonly languageCode?: string;
   readonly fetchImplementation?: typeof fetch;
-}): Promise<string> {
+}): Promise<LocalTranscriptionResult> {
   const formData = new FormData();
   formData.append(
     'file',
@@ -40,5 +56,14 @@ export async function transcribeAudioWithLocal(input: {
   if (transcript.length === 0) {
     throw new Error('STT devolvió texto vacío');
   }
-  return transcript;
+
+  return {
+    transcript,
+    duration: payload.duration,
+    language: payload.language,
+    backend: payload.backend,
+    latencyMs: payload.latency_ms,
+    avgLogprob: payload.avg_logprob,
+    noSpeechProb: payload.no_speech_prob,
+  };
 }

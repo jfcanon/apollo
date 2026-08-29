@@ -127,7 +127,7 @@ export async function executeApolloTurn(
 
   const voiceAdapters: VoiceAdapters = isMockVoice
     ? {
-        stt: async () => turnPart.text ?? 'hola',
+        stt: async () => ({ transcript: turnPart.text ?? 'hola' }),
         llm: async ({ messageList }) => {
           const userMessage = messageList.findLast((message) => message.role === 'user');
           const userText = userMessage?.role === 'user' ? userMessage.content : '';
@@ -146,15 +146,36 @@ export async function executeApolloTurn(
           // path exists. LOCAL_LLM_MODEL is separate from LLM_MODEL on purpose:
           // the mlx server treats the model field as a HuggingFace repo id and
           // returns 400 for a foreign name like "deepseek-chat".
-          stt: async (audioBuffer) =>
-            transcribeAudioWithLocal({
+          stt: async (audioBuffer) => {
+            const result = await transcribeAudioWithLocal({
               localSttUrl:
                 dependencies.environment.LOCAL_STT_URL ?? 'https://stt.ygdcbtmc4u.uk',
               audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
               ...(dependencies.environment.STT_LANGUAGE !== undefined
                 ? { languageCode: dependencies.environment.STT_LANGUAGE }
                 : {}),
-            }),
+            });
+            // Structured log line per call (NID-474)
+            console.log(
+              JSON.stringify({
+                level: 'info',
+                message: 'stt_local_call',
+                device_id: dependencies.deviceId,
+                backend: result.backend ?? 'unknown',
+                latency_ms: result.latencyMs ?? 0,
+                avg_logprob: result.avgLogprob ?? null,
+                no_speech_prob: result.noSpeechProb ?? null,
+                confirmed: false,
+              }),
+            );
+            return {
+              transcript: result.transcript,
+              avgLogprob: result.avgLogprob,
+              noSpeechProb: result.noSpeechProb,
+              backend: result.backend,
+              latencyMs: result.latencyMs,
+            };
+          },
           llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
             chatWithLlm({
               apiKey: dependencies.environment.LLM_API_KEY ?? '',
@@ -193,8 +214,8 @@ export async function executeApolloTurn(
             // Groq serves STT and TTS over plain HTTPS, so this path spends no
             // Workers AI neurons at all — the daily free allowance that kept
             // taking the whole voice loop down with it.
-            stt: async (audioBuffer) =>
-              transcribeAudioWithGroq({
+            stt: async (audioBuffer) => {
+              const transcript = await transcribeAudioWithGroq({
                 groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
                 audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
                 ...(dependencies.environment.GROQ_STT_MODEL !== undefined
@@ -203,7 +224,9 @@ export async function executeApolloTurn(
                 ...(dependencies.environment.STT_LANGUAGE !== undefined
                   ? { languageCode: dependencies.environment.STT_LANGUAGE }
                   : {}),
-              }),
+              });
+              return { transcript };
+            },
             llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
               chatWithLlm({
                 apiKey: dependencies.environment.LLM_API_KEY ?? '',
@@ -259,14 +282,16 @@ export async function executeApolloTurn(
           }
         : dependencies.environment.VOICE_PROVIDER === 'workersai'
           ? {
-              stt: async (audioBuffer) =>
-                transcribeAudioWithWorkersAi({
+              stt: async (audioBuffer) => {
+                const transcript = await transcribeAudioWithWorkersAi({
                   ai: dependencies.environment.AI,
                   audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
                   ...(dependencies.environment.STT_LANGUAGE !== undefined
                     ? { languageCode: dependencies.environment.STT_LANGUAGE }
                     : {}),
-                }),
+                });
+                return { transcript };
+              },
               llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
                 chatWithLlm({
                   apiKey: dependencies.environment.LLM_API_KEY ?? '',
@@ -300,8 +325,8 @@ export async function executeApolloTurn(
                 }),
             }
           : {
-              stt: async (audioBuffer) =>
-                transcribeAudioWithGroq({
+              stt: async (audioBuffer) => {
+                const transcript = await transcribeAudioWithGroq({
                   groqApiKey: dependencies.environment.GROQ_API_KEY ?? '',
                   audioBuffer: wrapPcmAsWavBuffer({ pcmBuffer: audioBuffer }),
                   ...(dependencies.environment.GROQ_STT_MODEL !== undefined
@@ -310,7 +335,9 @@ export async function executeApolloTurn(
                   ...(dependencies.environment.STT_LANGUAGE !== undefined
                     ? { languageCode: dependencies.environment.STT_LANGUAGE }
                     : {}),
-                }),
+                });
+                return { transcript };
+              },
               llm: async ({ messageList, toolDefinitionList, onTextDelta }) =>
                 chatWithLlm({
                   apiKey: dependencies.environment.LLM_API_KEY ?? '',
