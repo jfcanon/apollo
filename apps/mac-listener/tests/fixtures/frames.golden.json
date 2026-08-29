@@ -1,0 +1,62 @@
+[
+  {
+    "deviceId": "mac-listener",
+    "ts": 1756400000,
+    "type": "hello"
+  },
+  {
+    "deviceId": "mac-listener-headphones",
+    "ts": 1756400000,
+    "type": "hello"
+  },
+  {
+    "ts": 1756400000,
+    "type": "wake"
+  },
+  {
+    "ts": 1756400000,
+    "type": "audio_end"
+  },
+  {
+    "ts": 1756400000,
+    "type": "listen_cancel"
+  },
+  {
+    "ts": 1756400000,
+    "type": "abort"
+  },
+  {
+    "ok": true,
+    "ts": 1756400000,
+    "type": "confirm"
+  },
+  {
+    "ok": false,
+    "ts": 1756400000,
+    "type": "confirm"
+  },
+  {
+    "playedMilliseconds": 0,
+    "sequence": 0,
+    "ts": 1756400000,
+    "type": "playback_ack"
+  },
+  {
+    "playedMilliseconds": 1840,
+    "sequence": 3,
+    "ts": 1756400000,
+    "type": "playback_ack"
+  },
+  {
+    "ts": 1756400000,
+    "type": "telemetry"
+  },
+  {
+    "battery": 87,
+    "charging": true,
+    "firmwareVersion": "mac-listener",
+    "ts": 1756400000,
+    "type": "telemetry",
+    "volume": 60
+  }
+]
