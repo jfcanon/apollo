@@ -16,8 +16,8 @@ import {
   syncBoxPairTool,
   syncBoxSetAddressTool,
   syncBoxSetModeTool,
-  syncBoxSetSourceTool,
   syncBoxSetSyncTool,
+  syncBoxSetSourceTool,
   syncBoxStatusTool,
 } from '@/tools/syncbox';
 import { setTimerTool, startPomodoroTool } from '@/tools/timer';
@@ -26,6 +26,29 @@ import { translateTool } from '@/tools/translate';
 import { webSearchTool } from '@/tools/web';
 import type { ToolDefinition } from '@/tools/types';
 import { weatherNowTool } from '@/tools/weather';
+
+const COMPACT_CATALOG_TOOL_NAMES = new Set([
+  'timon_create_task',
+  'remember_fact',
+  'recall_memory',
+  'set_reminder',
+  'list_reminders',
+  'cancel_reminder',
+  'set_timer',
+  'start_pomodoro',
+  'weather_now',
+  'set_weather_location',
+  'next_events',
+  'device_status',
+  'set_focus',
+  'clear_focus',
+]);
+
+function filterCompactCatalog(
+  toolList: readonly ToolDefinition[],
+): readonly ToolDefinition[] {
+  return toolList.filter((tool) => COMPACT_CATALOG_TOOL_NAMES.has(tool.name));
+}
 
 export function listBuiltinToolDefinitionList(): readonly ToolDefinition[] {
   return [
@@ -70,6 +93,14 @@ export function listBuiltinToolDefinitionList(): readonly ToolDefinition[] {
   ];
 }
 
+export function listCompactToolDefinitionList(): readonly ToolDefinition[] {
+  return filterCompactCatalog(listBuiltinToolDefinitionList());
+}
+
 export function createBuiltinToolDefinitionMap(): Map<string, ToolDefinition> {
   return buildToolDefinitionMap(listBuiltinToolDefinitionList());
+}
+
+export function createCompactToolDefinitionMap(): Map<string, ToolDefinition> {
+  return buildToolDefinitionMap(listCompactToolDefinitionList());
 }

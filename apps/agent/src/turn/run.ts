@@ -18,10 +18,7 @@ import {
   type OpenRouterChatMessage,
 } from '@/voice/llm';
 import { sanitizeTextForSpeech } from '@/voice/sanitize';
-import {
-  SPEECH_SEGMENT_MAX_CHARACTER_COUNT,
-  splitTextIntoSpeechSegmentList,
-} from '@/voice/segment';
+import { splitTextIntoSpeechSegmentList } from '@/voice/segment';
 
 const DEFAULT_MAX_TOOL_ROUND_COUNT = 3;
 
@@ -338,10 +335,8 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
           memoryContentList,
           isFocusActive: input.focusState.active,
         })
-      : input.systemPromptOverride +
-        buildSemanticMemoryPromptNote(semanticMemoryContentList);
-  const systemPrompt =
-    systemPromptBase + buildCurrentTimePromptNote(input.nowMilliseconds);
+      : input.systemPromptOverride;
+  const systemPrompt = systemPromptBase;
 
   const toolDefinitionList = buildToolDefinitionListFromMap(input.toolDefinitionMap);
   const toolExecutionContext = {
@@ -352,10 +347,22 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
   };
   const maxToolRoundCount = input.maxToolRoundCount ?? DEFAULT_MAX_TOOL_ROUND_COUNT;
 
+  // Per-turn volatile notes (time, semantic recall) are prepended to the user
+  // message instead of the system prompt so the stable system prefix can be
+  // cached by APC.
+  const perTurnNotes = [
+    buildCurrentTimePromptNote(input.nowMilliseconds),
+    buildSemanticMemoryPromptNote(semanticMemoryContentList),
+  ]
+    .filter((note) => note.length > 0)
+    .join('\n');
+  const userMessageContent =
+    perTurnNotes.length > 0 ? `${perTurnNotes}\n\n${userText}` : userText;
+
   const messageList: OpenRouterChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...(input.recentHistoryMessageList ?? []),
-    { role: 'user', content: userText },
+    { role: 'user', content: userMessageContent },
   ];
   if (resolvedConfirmation !== undefined && resolvedConfirmationResult !== undefined) {
     messageList.push(
@@ -372,10 +379,10 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
 
   let spokenText = '';
 
-  // While the reply streams in, the first sentence-sized segment is closed as
-  // soon as more text follows it — synthesis starts right then, overlapping
-  // the rest of the generation. If the round turns out to be a tool call, the
-  // speculation is discarded (its text was never going to be spoken).
+  // While the reply streams in, the first sentence is closed as soon as a
+  // sentence terminator (.!?…) is seen — synthesis starts right then,
+  // overlapping the rest of the generation. If the round turns out to be a
+  // tool call, the speculation is discarded (its text was never spoken).
   let speculativeSegment:
     | {
         readonly text: string;
@@ -394,13 +401,15 @@ export async function runDeskTurn(input: TurnInput): Promise<TurnOutput> {
           return;
         }
         streamedRoundText += deltaText;
-        if (streamedRoundText.length <= SPEECH_SEGMENT_MAX_CHARACTER_COUNT) {
+        // Check if we have at least one complete sentence (terminated by .!?…)
+        const hasCompleteSentence = /[.!?…]\s*$/.test(streamedRoundText);
+        if (!hasCompleteSentence) {
           return;
         }
         const partialSegmentList = splitTextIntoSpeechSegmentList(
           sanitizeTextForSpeech(streamedRoundText),
         );
-        if (partialSegmentList.length < 2) {
+        if (partialSegmentList.length === 0) {
           return;
         }
         const firstClosedSegmentText = partialSegmentList[0];
