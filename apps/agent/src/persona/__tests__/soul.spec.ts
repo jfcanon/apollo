@@ -3,15 +3,20 @@ import { describe, expect, it } from 'bun:test';
 import { buildApolloSoulPrompt, buildInstalledToolPromptNote } from '@/persona/soul';
 
 describe('apollo soul prompt', () => {
-  it('always includes Apollo identity and shared tools base', () => {
+  it('always includes Apollo identity and essential tools base', () => {
     const soulPrompt = buildApolloSoulPrompt('default');
     expect(soulPrompt).toContain('You are Jarvis');
+    expect(soulPrompt).toContain('timon_create_task');
     expect(soulPrompt).toContain('remember_fact');
-    expect(soulPrompt).toContain('weather_now');
-    expect(soulPrompt).toContain('set_weather_location');
+    expect(soulPrompt).toContain('recall_memory');
+    expect(soulPrompt).toContain('set_reminder');
     expect(soulPrompt).toContain('list_reminders');
     expect(soulPrompt).toContain('cancel_reminder');
+    expect(soulPrompt).toContain('set_timer');
+    expect(soulPrompt).toContain('start_pomodoro');
     expect(soulPrompt).not.toContain('gmail');
+    expect(soulPrompt).not.toContain('web_search');
+    expect(soulPrompt).not.toContain('start_research');
   });
 
   it('includes nerd technical register', () => {

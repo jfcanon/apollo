@@ -16,7 +16,10 @@ import { APOLLO_TTS_VOICE, buildInstalledToolPromptNote } from '@/persona/soul';
 import { encodeServerToDeviceMessage } from '@/protocol/schema';
 import type { DeskUiMachine } from '@/session/machine';
 import { buildTelemetryPromptNote, type DeskTelemetrySnapshot } from '@/telemetry/logic';
-import { createBuiltinToolDefinitionMap } from '@/tools/catalog';
+import {
+  createBuiltinToolDefinitionMap,
+  createCompactToolDefinitionMap,
+} from '@/tools/catalog';
 import type {
   DeskToolEffects,
   PendingToolConfirmation,
@@ -108,11 +111,21 @@ export async function executeApolloTurn(
     dependencies.telemetrySnapshot,
     nowMilliseconds,
   );
+  const isLocalProvider = dependencies.environment.VOICE_PROVIDER === 'local';
   const toolDefinitionMap =
-    dependencies.toolDefinitionMap ?? createBuiltinToolDefinitionMap();
+    dependencies.toolDefinitionMap ??
+    (isLocalProvider
+      ? createCompactToolDefinitionMap()
+      : createBuiltinToolDefinitionMap());
   const installedToolNote = buildInstalledToolPromptNote(
     [...toolDefinitionMap.keys()].filter((toolName) => isNamespacedMcpToolName(toolName)),
   );
+
+  // Per-turn volatile notes (time, semantic recall) are NOT included in the
+  // system prompt override so that the stable prefix (soul + memory + focus +
+  // tool schemas) can be cached by APC. They are prepended to the user message
+  // in runDeskTurn instead.
+  const systemPromptOverride = `${sessionSystemPrompt}${focusNote}${telemetryNote}${installedToolNote}`;
 
   // Provider-specific body fields (e.g. DeepSeek thinking-mode off) arrive as
   // a JSON env var so switching vendors never means another code change.
@@ -391,7 +404,7 @@ export async function executeApolloTurn(
     confirmOk: turnPart.confirmOk,
     nowMilliseconds,
     deviceId: dependencies.deviceId,
-    systemPromptOverride: `${sessionSystemPrompt}${focusNote}${telemetryNote}${installedToolNote}`,
+    systemPromptOverride,
     recentHistoryMessageList,
     ...(isMockVoice ? {} : { recallSemanticMemoryContentList }),
     effects: dependencies.effects,

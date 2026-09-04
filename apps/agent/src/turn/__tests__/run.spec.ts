@@ -289,6 +289,7 @@ describe('runDeskTurn', () => {
     const sqlExecutor = createInMemorySqlExecutor();
     await addMemoryRecord(sqlExecutor, 'tomo mate a la mañana', 1, () => 'm1');
     let capturedSystemPrompt = '';
+    let capturedUserMessage = '';
 
     const output = await runDeskTurn({
       text: 'qué desayuno?',
@@ -302,11 +303,14 @@ describe('runDeskTurn', () => {
         stt: async () => ({ transcript: '' }),
         llm: async ({ messageList }) => {
           const systemMessage = messageList.find((message) => message.role === 'system');
-          const systemPrompt =
+          const userMessage = messageList.findLast((message) => message.role === 'user');
+          capturedSystemPrompt =
             systemMessage?.role === 'system' ? systemMessage.content : '';
-          capturedSystemPrompt = systemPrompt;
+          capturedUserMessage = userMessage?.role === 'user' ? userMessage.content : '';
           return {
-            text: systemPrompt.includes('mate') ? 'Tomás mate de mañana.' : 'No sé.',
+            text: capturedSystemPrompt.includes('mate')
+              ? 'Tomás mate de mañana.'
+              : 'No sé.',
             toolCallList: [],
           };
         },
@@ -317,13 +321,15 @@ describe('runDeskTurn', () => {
     expect(output.spokenText).toContain('mate');
     expect(output.uiEventList).toContain('START_SPEAK');
     expect(output.ttsAudio).toBeDefined();
-    // The model always knows what time it is: the wall clock rides the prompt.
-    expect(capturedSystemPrompt).toContain('Fecha y hora actual:');
+    // Memory content is in the system prompt (stable prefix for APC).
+    expect(capturedSystemPrompt).toContain('mate');
+    // Per-turn time note is in the user message (volatile, not cached).
+    expect(capturedUserMessage).toContain('Fecha y hora actual:');
   });
 
   it('returns the transcript of a spoken turn and recalls semantic memory with it', async () => {
     const semanticQueryTextList: string[] = [];
-    let capturedSystemPrompt = '';
+    let capturedUserMessage = '';
 
     const output = await runDeskTurn({
       audioBuffer: new TextEncoder().encode('audio-crudo').buffer as ArrayBuffer,
@@ -341,9 +347,8 @@ describe('runDeskTurn', () => {
       adapters: {
         stt: async () => ({ transcript: 'qué tomo a la mañana?' }),
         llm: async ({ messageList }) => {
-          const systemMessage = messageList.find((message) => message.role === 'system');
-          capturedSystemPrompt =
-            systemMessage?.role === 'system' ? systemMessage.content : '';
+          const userMessage = messageList.findLast((message) => message.role === 'user');
+          capturedUserMessage = userMessage?.role === 'user' ? userMessage.content : '';
           return { text: 'Café cargado.', toolCallList: [] };
         },
         tts: async (text) => new TextEncoder().encode(text).buffer as ArrayBuffer,
@@ -352,7 +357,7 @@ describe('runDeskTurn', () => {
 
     expect(output.transcript).toBe('qué tomo a la mañana?');
     expect(semanticQueryTextList).toEqual(['qué tomo a la mañana?']);
-    expect(capturedSystemPrompt).toContain('café cargado');
+    expect(capturedUserMessage).toContain('café cargado');
   });
 
   it('places recent turn history between the system prompt and the current utterance', async () => {
@@ -394,10 +399,10 @@ describe('runDeskTurn', () => {
       role: 'assistant',
       content: 'podés ir a la costa o quedarte a leer',
     });
-    expect(capturedMessageList[3]).toEqual({
-      role: 'user',
-      content: 'mandámelas por mail',
-    });
+    // The current user message has per-turn notes (time) prepended.
+    expect(capturedMessageList[3].role).toBe('user');
+    expect(capturedMessageList[3].content).toContain('Fecha y hora actual:');
+    expect(capturedMessageList[3].content).toContain('mandámelas por mail');
   });
 
   it('treats whitespace-only speech as nothing heard', async () => {
@@ -663,7 +668,7 @@ describe('runDeskTurn', () => {
     expect(output.toolResultList[0]?.summary).toContain('18');
   });
 
-  it('reuses the speculative first-segment synthesis started during streaming', async () => {
+  it('starts speculative TTS on first sentence, resynthesizes first segment if packing differs', async () => {
     const sentence = 'Esta es una respuesta larga que sigue y sigue con más detalle.';
     const longReply = Array.from({ length: 12 }, () => sentence).join(' ');
     const synthesizedTextList: string[] = [];
@@ -691,8 +696,12 @@ describe('runDeskTurn', () => {
       },
     });
 
-    expect(synthesizedTextList).toHaveLength(1);
-    expect(longReply.startsWith(synthesizedTextList[0])).toBe(true);
+    // Speculative TTS fires on first sentence; final first segment packs multiple
+    // sentences (up to 280 chars), so speculative audio is not reused and both
+    // syntheses occur. The first synthesis is the first sentence; the second is
+    // the packed first segment.
+    expect(synthesizedTextList.length).toBeGreaterThanOrEqual(2);
+    expect(synthesizedTextList[0]).toContain('Esta es una respuesta larga');
     expect(output.ttsAudio).toBeDefined();
     expect(output.ttsFollowUpSegmentTextList?.length).toBeGreaterThan(0);
   });

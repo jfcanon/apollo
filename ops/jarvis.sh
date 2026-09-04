@@ -45,6 +45,7 @@ TTS_CRED="$CF_DIR/$TTS_TUNNEL_ID.json"
 
 LOG_DIR="$JARVIS_ROOT/.logs"
 RUN_DIR="$JARVIS_ROOT/.run"
+APC_DISK_PATH="$JARVIS_ROOT/.apc-cache"
 SERVICES=(llm stt tts tunnel-llm tunnel-stt tunnel-tts)
 
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -94,7 +95,7 @@ wait_for() { # wait_for <url> <seconds> <label>
 
 cmd_bootstrap() {
   echo "== bootstrap (safe to re-run) =="
-  mkdir -p "$JARVIS_ROOT" "$LOG_DIR" "$RUN_DIR"
+  mkdir -p "$JARVIS_ROOT" "$LOG_DIR" "$RUN_DIR" "$APC_DISK_PATH"
 
   if [ -d "$TIMON_DIR/.git" ]; then
     echo "-- timon: pulling master"
@@ -175,7 +176,7 @@ cmd_up() {
   mkdir -p "$LOG_DIR" "$RUN_DIR"
   echo "== up =="
 
-  already_up llm  && echo "  llm  already running" || start_bg llm "$QWEN_PY" -m mlx_vlm.server \
+  already_up llm  && echo "  llm  already running" || start_bg llm env APC_ENABLED=1 APC_DISK_PATH="$APC_DISK_PATH" APC_DISK_MAX_GB=20 "$QWEN_PY" -m mlx_vlm.server \
       --model "$QWEN_MODEL" --host 127.0.0.1 --port 8080 \
       --max-kv-size 36864 --kv-bits 8 --quantized-kv-start 1024
 
