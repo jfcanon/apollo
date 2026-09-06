@@ -11,17 +11,18 @@
 #   ./jarvis.sh logs [name] tail a log (llm | stt | tts | tunnel-llm | tunnel-stt | tunnel-tts)
 #
 # Six processes have to be alive for the ESP32 to work:
-#   1. llm         mlx_vlm.server  127.0.0.1:8080   local Qwen
+#   1. llm         mlx_vlm.server  127.0.0.1:$JARVIS_LLM_PORT   local Qwen
 #   2. stt         whisper_server  0.0.0.0:8787     local Whisper
 #   3. tts         tts_server      0.0.0.0:8788     local Kokoro TTS (NID-534)
-#   4. tunnel-llm  cloudflared     llm.ygdcbtmc4u.uk  -> :8080
+#   4. tunnel-llm  cloudflared     llm.ygdcbtmc4u.uk  -> :$JARVIS_LLM_PORT
 #   5. tunnel-stt  cloudflared     stt.ygdcbtmc4u.uk  -> :8787
 #   6. tunnel-tts  cloudflared     tts.ygdcbtmc4u.uk  -> :8788
 # Apollo itself runs on Cloudflare and needs nothing after a reboot.
 #
 # Versioned here (apollo/ops) for NID-530; the operator page that explains it
 # lives at https://jarvis-timon-showcase.pages.dev/#runbook. Every path below
-# can be overridden by env (JARVIS_ROOT, QWEN_DIR, QWEN_MODEL, WHISPER_PY_BASE).
+# can be overridden by env (JARVIS_ROOT, QWEN_DIR, QWEN_MODEL, WHISPER_PY_BASE,
+# JARVIS_LLM_PORT).
 set -uo pipefail
 
 JARVIS_ROOT="${JARVIS_ROOT:-$HOME/orca/projects/jarvis}"
@@ -33,8 +34,11 @@ QWEN_MODEL="${QWEN_MODEL:-mlx-community/Qwen3.8-27B-4bit}"
 WHISPER_PY_BASE="${WHISPER_PY_BASE:-/opt/homebrew/bin/python3.12}"
 WHISPER_VENV="$TIMON_DIR/scripts/.venv"
 TTS_VENV="$TIMON_DIR/scripts/.venv-tts"
+JARVIS_LLM_PORT="${JARVIS_LLM_PORT:-8081}"
 
 CF_DIR="$HOME/.cloudflared"
+LLM_TUNNEL_NAME="llm"
+LLM_CONFIG="$CF_DIR/config.yml"
 STT_TUNNEL_ID="22bf6d7c-369b-4c84-8194-08ac93fd2471"
 STT_CONFIG="$CF_DIR/config-stt.yml"
 STT_CRED="$CF_DIR/$STT_TUNNEL_ID.json"
@@ -63,7 +67,7 @@ pid_alive() {
 # Did *something* (this script or a stray terminal) already start it?
 already_up() {
   case "$1" in
-    llm)        port_busy 8080 ;;
+    llm)        port_busy "$JARVIS_LLM_PORT" ;;
     stt)        port_busy 8787 ;;
     tts)        port_busy 8788 ;;
     tunnel-llm) pgrep -f 'cloudflared tunnel .*run.* llm$' >/dev/null 2>&1 || pid_alive tunnel-llm ;;
@@ -167,6 +171,18 @@ EOF
   else
     warn "   TTS tunnel not yet created via IaC (TTS_TUNNEL_ID placeholder) — run terraform in talvi then re-bootstrap"
   fi
+  # LLM tunnel config (local config, not IaC) — points to local Qwen on JARVIS_LLM_PORT.
+  # Always rewrite the ingress port to match JARVIS_LLM_PORT (the actual drift fix).
+  echo "-- writing $LLM_CONFIG (ingress port $JARVIS_LLM_PORT)"
+  cat >"$LLM_CONFIG" <<EOF
+tunnel: $LLM_TUNNEL_NAME
+credentials-file: $CF_DIR/$LLM_TUNNEL_NAME.json
+
+ingress:
+  - hostname: llm.ygdcbtmc4u.uk
+    service: http://localhost:$JARVIS_LLM_PORT
+  - service: http_status:404
+EOF
   green "bootstrap done — now run: ./jarvis.sh up"
 }
 
@@ -177,7 +193,7 @@ cmd_up() {
   echo "== up =="
 
   already_up llm  && echo "  llm  already running" || start_bg llm env APC_ENABLED=1 APC_DISK_PATH="$APC_DISK_PATH" APC_DISK_MAX_GB=20 "$QWEN_PY" -m mlx_vlm.server \
-      --model "$QWEN_MODEL" --host 127.0.0.1 --port 8080 \
+      --model "$QWEN_MODEL" --host 127.0.0.1 --port "$JARVIS_LLM_PORT" \
       --max-kv-size 36864 --kv-bits 8 --quantized-kv-start 1024
 
   already_up stt && echo "  stt  already running" || ( cd "$TIMON_DIR" && \
@@ -187,19 +203,19 @@ cmd_up() {
       start_bg tts "$TTS_VENV/bin/python" "$TIMON_DIR/scripts/tts_server.py" )
 
   already_up tunnel-llm && echo "  tunnel-llm already running" || \
-      start_bg tunnel-llm cloudflared tunnel --config "$CF_DIR/config.yml" run llm
+      start_bg tunnel-llm cloudflared tunnel --config "$LLM_CONFIG" run llm
   already_up tunnel-stt && echo "  tunnel-stt already running" || \
       start_bg tunnel-stt cloudflared tunnel --config "$STT_CONFIG" run whisper-stt
   if [[ "$TTS_TUNNEL_ID" != "00000000-0000-4000-a000-000000000000" ]] && [ -f "$TTS_CONFIG" ]; then
     already_up tunnel-tts && echo "  tunnel-tts already running" || \
         start_bg tunnel-tts cloudflared tunnel --config "$TTS_CONFIG" run tts
   else
-    warn "   skipping tunnel-tts (IaC not yet applied)"
+    warn "   skipping tunnel-tts (IaC not yet applied; set TTS_TUNNEL_ID after talvi terraform)"
   fi
 
   echo "== verify (first Whisper/Kokoro start downloads models — can take a few minutes) =="
   local rc=0
-  wait_for http://127.0.0.1:8080/v1/models      60  "llm        local  :8080" || rc=1
+  wait_for "http://127.0.0.1:$JARVIS_LLM_PORT/v1/models"      60  "llm        local  :$JARVIS_LLM_PORT" || rc=1
   wait_for http://127.0.0.1:8787/healthz       600  "stt        local  :8787" || rc=1
   wait_for http://127.0.0.1:8788/healthz       600  "tts        local  :8788" || rc=1
   wait_for https://llm.ygdcbtmc4u.uk/v1/models  60  "llm        public tunnel" || rc=1
@@ -251,12 +267,28 @@ cmd_status() {
     already_up "$s" && green "  up    $s" || red "  down  $s"
   done
   echo "== endpoints =="
-  for u in http://127.0.0.1:8080/v1/models http://127.0.0.1:8787/healthz http://127.0.0.1:8788/healthz \
+  for u in "http://127.0.0.1:$JARVIS_LLM_PORT/v1/models" http://127.0.0.1:8787/healthz http://127.0.0.1:8788/healthz \
            https://llm.ygdcbtmc4u.uk/v1/models https://stt.ygdcbtmc4u.uk/healthz https://tts.ygdcbtmc4u.uk/healthz; do
     printf '  %-45s %s\n' "$u" "$(curl -s -o /dev/null -m 8 -w '%{http_code}' "$u")"
   done
   cmd_backend
   cmd_tts_backend
+  echo "== apc (prompt cache) =="
+  local apc_url="http://127.0.0.1:$JARVIS_LLM_PORT/v1/cache/stats"
+  local apc_json
+  apc_json=$(curl -sf -m 5 "$apc_url" 2>/dev/null) || {
+    red "  apc stats: unreachable at $apc_url"
+    return 0
+  }
+  local enabled lookups_hit lookups_miss
+  enabled=$(echo "$apc_json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("enabled","<none>"))' 2>/dev/null)
+  lookups_hit=$(echo "$apc_json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("lookups_hit","<none>"))' 2>/dev/null)
+  lookups_miss=$(echo "$apc_json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("lookups_miss","<none>"))' 2>/dev/null)
+  if [ "$enabled" = "True" ] || [ "$enabled" = "true" ]; then
+    green "  apc: enabled=true, hits=$lookups_hit, misses=$lookups_miss"
+  else
+    warn "  apc: enabled=$enabled (expected true)"
+  fi
   echo "== apollo (cloudflare, nothing to start) =="
   printf '  %-45s %s\n' "apollo /health" \
     "$(curl -s -o /dev/null -m 8 -w '%{http_code}' https://apollo.ygdcbtmc4u.workers.dev/health)"
